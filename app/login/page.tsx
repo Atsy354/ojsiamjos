@@ -96,6 +96,41 @@ export default function LoginPage() {
     setEmail(userEmail)
 
     try {
+      // Try API login with default password for demo users
+      // Password format: {role}123 (e.g., admin123, editor123, author123, reviewer123)
+      const passwordMap: Record<string, string> = {
+        "admin@iamjos.org": "admin123",
+        "editor@jcst.org": "editor123",
+        "author@jcst.org": "author123",
+        "reviewer@jcst.org": "reviewer123",
+        "reviewer2@jcst.org": "reviewer123",
+      }
+      
+      const password = passwordMap[userEmail] || "demo123"
+      
+      try {
+        const response = await fetch("/api/auth/login", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ 
+            email: userEmail, 
+            password: password
+          }),
+        })
+
+        if (response.ok) {
+          const data = await response.json()
+          // Save token to localStorage
+          if (typeof window !== "undefined" && data.token) {
+            localStorage.setItem("auth_token", data.token)
+            localStorage.setItem("current_user", JSON.stringify(data.user))
+          }
+        }
+      } catch (apiErr) {
+        console.error("API login error:", apiErr)
+        // Continue with localStorage login
+      }
+
       const user = await login(userEmail)
       if (user) {
         if (journalPath) {
@@ -128,6 +163,42 @@ export default function LoginPage() {
     setIsLoading(true)
 
     try {
+      // Try API login first
+      if (password) {
+        try {
+          const response = await fetch("/api/auth/login", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ email, password }),
+          })
+
+          if (response.ok) {
+            const data = await response.json()
+            // Save token to localStorage
+            if (typeof window !== "undefined" && data.token) {
+              localStorage.setItem("auth_token", data.token)
+              localStorage.setItem("current_user", JSON.stringify(data.user))
+            }
+            // Also set in localStorage-based auth for compatibility
+            const user = await login(email)
+            if (user) {
+              if (user.roles.includes("admin") && !user.journalId) {
+                router.push(ROUTES.ADMIN)
+              } else if (user.journalId) {
+                router.push(ROUTES.journalDashboard(user.journalId))
+              } else {
+                router.push(ROUTES.DASHBOARD)
+              }
+              return
+            }
+          }
+        } catch (apiErr) {
+          console.error("API login error:", apiErr)
+          // Fall through to localStorage login
+        }
+      }
+
+      // Fallback to localStorage-based login (for demo without password)
       const user = await login(email)
       if (user) {
         if (user.roles.includes("admin") && !user.journalId) {

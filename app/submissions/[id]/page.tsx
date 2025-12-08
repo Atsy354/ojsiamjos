@@ -5,10 +5,13 @@ import type React from "react"
 import { useEffect, useState } from "react"
 import { useParams, useRouter } from "next/navigation"
 import { DashboardLayout } from "@/components/layout/dashboard-layout"
-import { useSubmission } from "@/lib/hooks/use-submissions"
+import { useSubmissionAPI } from "@/lib/hooks/use-submissions-api"
+import { useReviewRoundsAPI, useReviewsAPI } from "@/lib/hooks/use-reviews-api"
 import { useAuth } from "@/lib/hooks/use-auth"
-import { userService, reviewAssignmentService, reviewRoundService } from "@/lib/storage"
+import { apiGet, apiPost, apiPut } from "@/lib/api/client"
 import { initializeStorage } from "@/lib/storage"
+import { toast } from "sonner"
+import { apiPost as apiPostHelper } from "@/lib/api/client"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
@@ -49,19 +52,49 @@ export default function SubmissionDetailPage() {
   const params = useParams()
   const router = useRouter()
   const { user, isEditor } = useAuth()
-  const { submission, reviews, rounds, isLoading, update } = useSubmission(params.id as string)
+  const { submission, isLoading, update } = useSubmissionAPI(params.id as string)
+  const { rounds } = useReviewRoundsAPI(params.id as string)
+  const { assignReviewer } = useReviewsAPI()
   const [mounted, setMounted] = useState(false)
   const [reviewers, setReviewers] = useState<User[]>([])
   const [selectedReviewer, setSelectedReviewer] = useState("")
   const [decisionDialog, setDecisionDialog] = useState(false)
   const [decision, setDecision] = useState("")
   const [decisionComments, setDecisionComments] = useState("")
+  const [reviews, setReviews] = useState<any[]>([])
 
   useEffect(() => {
     initializeStorage()
     setMounted(true)
-    setReviewers(userService.getByRole("reviewer"))
-  }, [])
+    
+    // Fetch reviewers from API
+    const fetchReviewers = async () => {
+      try {
+        const users = await apiGet<User[]>("/api/users?role=reviewer")
+        setReviewers(users)
+      } catch (err) {
+        console.error("Failed to fetch reviewers:", err)
+      }
+    }
+    
+    if (isEditor) {
+      fetchReviewers()
+    }
+
+    // Fetch reviews for this submission
+    const fetchReviews = async () => {
+      try {
+        const reviewsData = await apiGet<any[]>(`/api/reviews?submissionId=${params.id}`)
+        setReviews(reviewsData)
+      } catch (err) {
+        console.error("Failed to fetch reviews:", err)
+      }
+    }
+    
+    if (submission) {
+      fetchReviews()
+    }
+  }, [isEditor, params.id, submission])
 
   if (!mounted || isLoading || !submission) {
     return (
@@ -76,49 +109,101 @@ export default function SubmissionDetailPage() {
   const status = statusConfig[submission.status]
   const StatusIcon = status.icon
 
-  const handleSendToReview = () => {
-    const round = reviewRoundService.create({
-      submissionId: submission.id,
-      round: (rounds.length || 0) + 1,
-      status: "pending",
-      dateCreated: new Date().toISOString(),
-    })
-
-    update({
-      status: "under_review",
-      currentRound: round.round,
-      stageId: 3,
-    })
+  const handleSendToReview = async () => {
+    try {
+      // Create review round via API (this will also update status to under_review)
+      await apiPostHelper("/api/reviews/rounds", {
+        submissionId: submission!.id,
+      })
+      toast.success("Submission sent to review")
+      // Refresh page to get updated data
+      setTimeout(() => {
+        router.refresh()
+      }, 500)
+    } catch (error: any) {
+      toast.error(error.message || "Failed to send to review")
+    }
   }
 
-  const handleAssignReviewer = () => {
-    if (!selectedReviewer || rounds.length === 0) return
-
-    const currentRound = rounds[rounds.length - 1]
-    reviewAssignmentService.create({
-      submissionId: submission.id,
-      reviewerId: selectedReviewer,
-      reviewRoundId: currentRound.id,
-      status: "pending",
-      dateAssigned: new Date().toISOString(),
-      dateDue: new Date(Date.now() + 14 * 24 * 60 * 60 * 1000).toISOString(),
-    })
-
-    setSelectedReviewer("")
-    router.refresh()
-  }
-
-  const handleDecision = () => {
-    if (!decision) return
-
-    const statusMap: Record<string, SubmissionStatus> = {
-      accept: "accepted",
-      decline: "declined",
-      revisions: "revision_required",
+  const handleAssignReviewer = async () => {
+    if (!selectedReviewer) {
+      toast.error("Please select a reviewer")
+      return
     }
 
-    update({ status: statusMap[decision] || submission.status })
-    setDecisionDialog(false)
+    if (rounds.length === 0) {
+      // Create review round first
+      try {
+        await handleSendToReview()
+        // Wait a bit for round to be created, then assign
+        setTimeout(async () => {
+          await assignReviewerHandler()
+        }, 500)
+      } catch (error) {
+        console.error("Failed to create review round:", error)
+      }
+      return
+    }
+
+    await assignReviewerHandler()
+  }
+
+  const assignReviewerHandler = async () => {
+    try {
+      const currentRound = rounds[rounds.length - 1]
+      const dateDue = new Date(Date.now() + 14 * 24 * 60 * 60 * 1000).toISOString()
+
+      await assignReviewer({
+        submissionId: submission!.id,
+        reviewerId: selectedReviewer,
+        reviewRoundId: currentRound.id,
+        dateDue,
+      })
+
+      toast.success("Reviewer assigned successfully")
+      setSelectedReviewer("")
+      // Refresh reviews
+      const reviewsData = await apiGet<any[]>(`/api/reviews?submissionId=${submission!.id}`)
+      setReviews(reviewsData)
+    } catch (error: any) {
+      toast.error(error.message || "Failed to assign reviewer")
+    }
+  }
+
+  const handleDecision = async () => {
+    if (!decision) return
+
+    try {
+      const statusMap: Record<string, SubmissionStatus> = {
+        accept: "accepted",
+        decline: "declined",
+        revisions: "revision_required",
+      }
+
+      await update({ 
+        status: statusMap[decision] || submission!.status 
+      })
+      
+      // Create editorial decision record
+      const currentRound = rounds.length > 0 ? rounds[rounds.length - 1].id : null
+      try {
+        await apiPost("/api/submissions/" + submission!.id + "/decision", {
+          decision,
+          comments: decisionComments,
+          reviewRoundId: currentRound,
+        })
+      } catch (err: any) {
+        // Decision endpoint will handle status update, but continue if it fails
+        console.log("Decision endpoint error:", err.message)
+      }
+
+      toast.success("Decision recorded successfully")
+      setDecisionDialog(false)
+      setDecision("")
+      setDecisionComments("")
+    } catch (error: any) {
+      toast.error(error.message || "Failed to record decision")
+    }
   }
 
   return (

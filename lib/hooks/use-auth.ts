@@ -19,6 +19,41 @@ export function useAuth() {
     const currentUser = userService.getCurrentUser()
     setUser(currentUser)
 
+    // Check if we have a user but no token, try to get token
+    if (currentUser && typeof window !== "undefined") {
+      const existingToken = localStorage.getItem("auth_token")
+      if (!existingToken && currentUser.email) {
+        // Try to login via API with default password for demo
+        // Password format: {role}123 (e.g., admin123, editor123, author123, reviewer123)
+        const passwordMap: Record<string, string> = {
+          "admin@iamjos.org": "admin123",
+          "editor@jcst.org": "editor123",
+          "author@jcst.org": "author123",
+          "reviewer@jcst.org": "reviewer123",
+          "reviewer2@jcst.org": "reviewer123",
+        }
+        const password = passwordMap[currentUser.email] || "demo123"
+        
+        fetch("/api/auth/login", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ 
+            email: currentUser.email, 
+            password: password
+          }),
+        })
+          .then((res) => res.json())
+          .then((data) => {
+            if (data.token) {
+              localStorage.setItem("auth_token", data.token)
+            }
+          })
+          .catch(() => {
+            // Ignore errors, user might not have password set
+          })
+      }
+    }
+
     if (currentUser?.journalId) {
       const journal = journalService.getByPath(currentUser.journalId)
       if (journal) {

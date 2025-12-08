@@ -5,6 +5,7 @@ import Link from "next/link"
 import { journalService, userService } from "@/lib/storage"
 import type { Journal, User } from "@/lib/types"
 import { Globe, ChevronDown, ChevronRight, UserIcon, Languages } from "lucide-react"
+import { apiGet, apiPost, apiPut, apiDelete } from "@/lib/api/client"
 
 const COUNTRIES = [
   "Afghanistan",
@@ -74,69 +75,85 @@ const LANGUAGES = [
   { code: "es", name: "Spanish" },
 ]
 
+// Local ArticleComponent interface that matches the database schema
 interface ArticleComponent {
   id: string
+  journalId: string
   name: string
   fileType: "document" | "artwork" | "supplementary"
   isRequired: boolean
   isMetadataDependent: boolean
+  sequence?: number
 }
 
+// Local ChecklistItem interface that matches the database schema
 interface ChecklistItem {
   id: string
+  journalId: string
   content: string
   order: number
+  isActive?: boolean
 }
 
+// Local ReviewForm interface that matches the database schema
 interface ReviewForm {
   id: string
+  journalId: string
   title: string
-  description: string
+  description?: string | null
   isActive: boolean
+  sequence?: number
 }
 
+// Local LibraryDocument interface that matches the database schema
 interface LibraryDocument {
   id: string
+  journalId: string
   name: string
   type: "marketing" | "permission" | "report" | "other"
+  filePath?: string | null
+  fileUrl?: string | null
   dateUploaded: string
   isPublic: boolean
 }
 
+// Local EmailTemplate interface that matches the database schema
 interface EmailTemplate {
   id: string
+  journalId: string
   name: string
   subject: string
   body: string
-  description: string
+  description?: string | null
   isEnabled: boolean
 }
 
-interface Section {
-  id: string
-  title: string
-  abbreviation: string
-  policy: string
-  wordCount: number
-  reviewFormId: string
-  isInactive: boolean
-  isPeerReviewed: boolean
-  requireAbstracts: boolean
-  notIndexed: boolean
-  editorRestricted: boolean
-  hideTitle: boolean
-  hideAuthor: boolean
-  assignedEditors: string[]
+// Local Section interface that extends the base Section type with UI-specific fields
+interface LocalSection extends Section {
+  // UI-only fields (not stored in database)
+  reviewFormId?: string
+  isInactive?: boolean
+  isPeerReviewed?: boolean
+  requireAbstracts?: boolean
+  notIndexed?: boolean
+  editorRestricted?: boolean
+  hideTitle?: boolean
+  hideAuthor?: boolean
+  assignedEditors?: string[]
 }
 
+// Local Category interface that matches the database schema
 interface Category {
   id: string
+  journalId: string
   name: string
   path: string
   parentId: string | null
-  description: string
+  description?: string | null
   sortOption: "datePublished" | "title"
-  image: string | null
+  image?: string | null
+  sequence?: number
+  children?: Category[]
 }
 
 type ViewType = "list" | "create" | "edit" | "settings-wizard"
@@ -219,50 +236,13 @@ export default function HostedJournalsPage() {
   const [expandedJournalId, setExpandedJournalId] = useState<string | null>(null)
 
   // Article Components
-  const [articleComponents, setArticleComponents] = useState<ArticleComponent[]>([
-    { id: "1", name: "Article Text", fileType: "document", isRequired: true, isMetadataDependent: false },
-    { id: "2", name: "Research Instrument", fileType: "document", isRequired: false, isMetadataDependent: false },
-    { id: "3", name: "Research Materials", fileType: "document", isRequired: false, isMetadataDependent: false },
-    { id: "4", name: "Research Results", fileType: "document", isRequired: false, isMetadataDependent: false },
-    { id: "5", name: "Transcripts", fileType: "document", isRequired: false, isMetadataDependent: false },
-    { id: "6", name: "Data Analysis", fileType: "document", isRequired: false, isMetadataDependent: false },
-    { id: "7", name: "Data Set", fileType: "supplementary", isRequired: false, isMetadataDependent: false },
-    { id: "8", name: "Source Texts", fileType: "document", isRequired: false, isMetadataDependent: false },
-    { id: "9", name: "Multimedia", fileType: "artwork", isRequired: false, isMetadataDependent: false },
-    { id: "10", name: "Image", fileType: "artwork", isRequired: false, isMetadataDependent: false },
-    { id: "11", name: "HTML Stylesheet", fileType: "document", isRequired: false, isMetadataDependent: false },
-    { id: "12", name: "Other", fileType: "supplementary", isRequired: false, isMetadataDependent: false },
-  ])
+  const [articleComponents, setArticleComponents] = useState<ArticleComponent[]>([])
   const [expandedComponent, setExpandedComponent] = useState<string | null>(null)
   const [editingComponent, setEditingComponent] = useState<ArticleComponent | null>(null)
   const [showComponentModal, setShowComponentModal] = useState(false)
 
   // Submission Checklist
-  const [checklistItems, setChecklistItems] = useState<ChecklistItem[]>([
-    {
-      id: "1",
-      content:
-        "The submission has not been previously published, nor is it before another journal for consideration (or an explanation has been provided in Comments to the Editor).",
-      order: 1,
-    },
-    {
-      id: "2",
-      content: "The submission file is in OpenDocument, Microsoft Word, or RTF document file format.",
-      order: 2,
-    },
-    { id: "3", content: "Where available, URLs for the references have been provided.", order: 3 },
-    {
-      id: "4",
-      content:
-        "The text is single-spaced; uses a 12-point font; employs italics, rather than underlining (except with URL addresses); and all illustrations, figures, and tables are placed within the text at the appropriate points, rather than at the end.",
-      order: 4,
-    },
-    {
-      id: "5",
-      content: "The text adheres to the stylistic and bibliographic requirements outlined in the Author Guidelines.",
-      order: 5,
-    },
-  ])
+  const [checklistItems, setChecklistItems] = useState<ChecklistItem[]>([])
   const [editingChecklist, setEditingChecklist] = useState<ChecklistItem | null>(null)
   const [showChecklistModal, setShowChecklistModal] = useState(false)
 
@@ -282,108 +262,17 @@ export default function HostedJournalsPage() {
   })
 
   // Review Forms
-  const [reviewForms, setReviewForms] = useState<ReviewForm[]>([
-    {
-      id: "1",
-      title: "Default Review Form",
-      description: "Standard review form for article submissions",
-      isActive: true,
-    },
-  ])
+  const [reviewForms, setReviewForms] = useState<ReviewForm[]>([])
   const [editingReviewForm, setEditingReviewForm] = useState<ReviewForm | null>(null)
   const [showReviewFormModal, setShowReviewFormModal] = useState(false)
 
   // Publisher Library
-  const [libraryDocuments, setLibraryDocuments] = useState<LibraryDocument[]>([
-    { id: "1", name: "Author Agreement", type: "permission", dateUploaded: "2024-01-15", isPublic: false },
-    { id: "2", name: "Reviewer Guidelines PDF", type: "other", dateUploaded: "2024-02-20", isPublic: true },
-  ])
+  const [libraryDocuments, setLibraryDocuments] = useState<LibraryDocument[]>([])
   const [editingDocument, setEditingDocument] = useState<LibraryDocument | null>(null)
   const [showDocumentModal, setShowDocumentModal] = useState(false)
 
   // Email Templates
-  const [emailTemplates, setEmailTemplates] = useState<EmailTemplate[]>([
-    {
-      id: "1",
-      name: "SUBMISSION_ACK",
-      subject: "Submission Acknowledgement",
-      body: "Thank you for your submission...",
-      description: "Sent to author when submission is received",
-      isEnabled: true,
-    },
-    {
-      id: "2",
-      name: "SUBMISSION_ACK_NOT_USER",
-      subject: "Submission Acknowledgement (Not User)",
-      body: "A submission has been made...",
-      description: "Sent to author who is not registered",
-      isEnabled: true,
-    },
-    {
-      id: "3",
-      name: "EDITOR_ASSIGN",
-      subject: "Editorial Assignment",
-      body: "You have been assigned...",
-      description: "Sent when editor is assigned to submission",
-      isEnabled: true,
-    },
-    {
-      id: "4",
-      name: "REVIEW_REQUEST",
-      subject: "Article Review Request",
-      body: "Dear reviewer...",
-      description: "Sent to request a review",
-      isEnabled: true,
-    },
-    {
-      id: "5",
-      name: "REVIEW_REQUEST_ONECLICK",
-      subject: "Article Review Request (One-Click)",
-      body: "Click to accept or decline...",
-      description: "Review request with one-click links",
-      isEnabled: true,
-    },
-    {
-      id: "6",
-      name: "REVIEW_REMIND",
-      subject: "Submission Review Reminder",
-      body: "This is a reminder...",
-      description: "Reminder for pending review",
-      isEnabled: true,
-    },
-    {
-      id: "7",
-      name: "REVIEW_CONFIRM",
-      subject: "Review Acknowledged",
-      body: "Thank you for completing...",
-      description: "Sent when review is completed",
-      isEnabled: true,
-    },
-    {
-      id: "8",
-      name: "EDITOR_DECISION_ACCEPT",
-      subject: "Editor Decision: Accept",
-      body: "We are pleased to inform...",
-      description: "Acceptance notification",
-      isEnabled: true,
-    },
-    {
-      id: "9",
-      name: "EDITOR_DECISION_REVISIONS",
-      subject: "Editor Decision: Revisions Required",
-      body: "Please revise your submission...",
-      description: "Revisions required notification",
-      isEnabled: true,
-    },
-    {
-      id: "10",
-      name: "EDITOR_DECISION_DECLINE",
-      subject: "Editor Decision: Decline",
-      body: "We regret to inform...",
-      description: "Rejection notification",
-      isEnabled: true,
-    },
-  ])
+  const [emailTemplates, setEmailTemplates] = useState<EmailTemplate[]>([])
   const [editingEmail, setEditingEmail] = useState<EmailTemplate | null>(null)
   const [showEmailModal, setShowEmailModal] = useState(false)
   const [emailSearch, setEmailSearch] = useState("")
@@ -407,65 +296,13 @@ export default function HostedJournalsPage() {
     enableCitations: true,
   })
 
-  const [sections, setSections] = useState<Section[]>([
-    {
-      id: "1",
-      title: "Articles",
-      abbreviation: "ART",
-      policy: "",
-      wordCount: 0,
-      reviewFormId: "",
-      isInactive: false,
-      isPeerReviewed: true,
-      requireAbstracts: true,
-      notIndexed: false,
-      editorRestricted: false,
-      hideTitle: false,
-      hideAuthor: false,
-      assignedEditors: [],
-    },
-    {
-      id: "2",
-      title: "Book Reviews",
-      abbreviation: "BR",
-      policy: "",
-      wordCount: 0,
-      reviewFormId: "",
-      isInactive: false,
-      isPeerReviewed: false,
-      requireAbstracts: false,
-      notIndexed: false,
-      editorRestricted: false,
-      hideTitle: false,
-      hideAuthor: false,
-      assignedEditors: [],
-    },
-  ])
+  const [sections, setSections] = useState<Section[]>([])
   const [expandedSection, setExpandedSection] = useState<string | null>(null)
-  const [editingSection, setEditingSection] = useState<Section | null>(null)
+  const [editingSection, setEditingSection] = useState<LocalSection | null>(null)
   const [showSectionModal, setShowSectionModal] = useState(false)
   const [showOrderSections, setShowOrderSections] = useState(false)
 
-  const [categories, setCategories] = useState<Category[]>([
-    {
-      id: "1",
-      name: "Open Source Software",
-      path: "open-source",
-      parentId: null,
-      description: "",
-      sortOption: "datePublished",
-      image: null,
-    },
-    {
-      id: "2",
-      name: "Open Access",
-      path: "open-access",
-      parentId: null,
-      description: "",
-      sortOption: "datePublished",
-      image: null,
-    },
-  ])
+  const [categories, setCategories] = useState<Category[]>([])
   const [expandedCategory, setExpandedCategory] = useState<string | null>(null)
   const [editingCategory, setEditingCategory] = useState<Category | null>(null)
   const [showCategoryModal, setShowCategoryModal] = useState(false)
@@ -500,8 +337,25 @@ export default function HostedJournalsPage() {
   })
 
   useEffect(() => {
-    setJournals(journalService.getAll())
-    setUsers(userService.getAll())
+    const loadJournals = async () => {
+      try {
+        const token = typeof window !== "undefined" ? localStorage.getItem("auth_token") : null
+        if (token) {
+          // Try to load from API
+          const journalsFromApi = await apiGet<Journal[]>("/api/journals")
+          setJournals(journalsFromApi || [])
+        } else {
+          // Fallback to localStorage
+          setJournals(journalService.getAll())
+        }
+      } catch (error) {
+        console.error("Failed to load journals from API, falling back to localStorage:", error)
+        setJournals(journalService.getAll())
+      }
+    }
+    
+    loadJournals()
+    setUsers(userService.getAll()) // Users can stay in localStorage for now
     if (typeof window !== "undefined") {
       setPublishInfo(getPublishInfo())
     }
@@ -568,7 +422,7 @@ export default function HostedJournalsPage() {
   }
 
   // Function to open the settings wizard for a specific journal
-  const handleOpenSettings = (journal: Journal) => {
+  const handleOpenSettings = async (journal: Journal) => {
     setEditingJournal(journal)
     setFormData({
       name: journal.name,
@@ -595,43 +449,110 @@ export default function HostedJournalsPage() {
       primaryLocale: journal.primaryLocale || "en",
       enabled: true,
     })
+    
+    // Load sections and categories for this journal
+    try {
+      const token = typeof window !== "undefined" ? localStorage.getItem("auth_token") : null
+      if (token) {
+        const [journalSections, journalCategories, journalComponents, checklistItems] = await Promise.all([
+          apiGet<Section[]>(`/api/journals/${journal.id}/sections`).catch(() => []),
+          apiGet<Category[]>(`/api/journals/${journal.id}/categories`).catch(() => []),
+          apiGet(`/api/journals/${journal.id}/components`).catch(() => []),
+          apiGet(`/api/journals/${journal.id}/checklist`).catch(() => []),
+        ])
+        setSections(journalSections || [])
+        setCategories(journalCategories || [])
+        setArticleComponents(journalComponents || [])
+        setChecklistItems(checklistItems || [])
+      }
+    } catch (error) {
+      console.error("Failed to load journal data:", error)
+      setSections([])
+      setCategories([])
+    }
+    
     setSettingsTab("journal-settings")
     setJournalSettingsTab("masthead")
     setCurrentView("settings-wizard")
   }
 
-  const handleSave = () => {
-    if (editingJournal) {
-      journalService.update(editingJournal.id, {
+  const handleSave = async () => {
+    try {
+      const token = typeof window !== "undefined" ? localStorage.getItem("auth_token") : null
+      if (!token) {
+        alert("Please login first")
+        return
+      }
+
+      const journalData = {
         name: formData.name,
         acronym: formData.acronym,
         description: formData.journalSummary || formData.description,
-        issn: formData.onlineIssn,
-        publisher: formData.publisher,
+        issn: formData.onlineIssn || undefined,
+        publisher: formData.publisher || undefined,
         contactEmail: formData.contactEmail,
         primaryLocale: formData.primaryLocale,
-        path: formData.path, // Ensure path is saved
-      })
-    } else {
-      journalService.create({
-        name: formData.name,
-        acronym: formData.acronym,
-        description: formData.journalSummary || formData.description,
-        issn: formData.onlineIssn,
-        publisher: formData.publisher,
-        contactEmail: formData.contactEmail,
-        primaryLocale: formData.primaryLocale,
-        path: formData.path, // Ensure path is saved
-      })
+        path: editingJournal?.path || formData.path || formData.acronym.toLowerCase().replace(/\s+/g, "-"),
+      }
+
+      let updatedJournal: Journal
+      if (editingJournal) {
+        updatedJournal = await apiPut<Journal>(`/api/journals/${editingJournal.id}`, journalData)
+      } else {
+        updatedJournal = await apiPost<Journal>("/api/journals", journalData)
+      }
+
+      // Update editingJournal and formData with latest data
+      setEditingJournal(updatedJournal)
+      setFormData((prev) => ({
+        ...prev,
+        name: updatedJournal.name,
+        acronym: updatedJournal.acronym,
+        abbreviation: updatedJournal.acronym,
+        publisher: updatedJournal.publisher || "",
+        onlineIssn: updatedJournal.issn || "",
+        journalSummary: updatedJournal.description,
+        description: updatedJournal.description,
+        contactEmail: updatedJournal.contactEmail,
+        primaryLocale: updatedJournal.primaryLocale,
+        path: updatedJournal.path,
+      }))
+
+      // Reload journals list
+      const updatedJournals = await apiGet<Journal[]>("/api/journals")
+      setJournals(updatedJournals || [])
+
+      // Only navigate to list if not in settings wizard
+      if (currentView !== "settings-wizard") {
+        setCurrentView("list")
+      } else {
+        // Show success message in settings wizard
+        alert("Settings saved successfully!")
+      }
+    } catch (error: any) {
+      console.error("Failed to save journal:", error)
+      alert(error.message || "Failed to save journal")
     }
-    setJournals(journalService.getAll())
-    setCurrentView("list")
   }
 
-  const handleDelete = (id: string) => {
-    setDeleteConfirm(null)
-    journalService.delete(id)
-    setJournals(journalService.getAll())
+  const handleDelete = async (id: string) => {
+    try {
+      const token = typeof window !== "undefined" ? localStorage.getItem("auth_token") : null
+      if (!token) {
+        alert("Please login first")
+        return
+      }
+
+      setDeleteConfirm(null)
+      await apiDelete(`/api/journals/${id}`)
+
+      // Reload journals
+      const updatedJournals = await apiGet<Journal[]>("/api/journals")
+      setJournals(updatedJournals || [])
+    } catch (error: any) {
+      console.error("Failed to delete journal:", error)
+      alert(error.message || "Failed to delete journal")
+    }
   }
 
   const handleLanguageToggle = (code: string) => {
@@ -646,17 +567,35 @@ export default function HostedJournalsPage() {
   }
 
   const handleEditSection = (section: Section) => {
-    setEditingSection({ ...section })
+    // Convert Section to LocalSection with default UI fields
+    const localSection: LocalSection = {
+      ...section,
+      reviewFormId: "",
+      isInactive: !section.isActive,
+      isPeerReviewed: true, // Default value
+      requireAbstracts: true, // Default value
+      notIndexed: false,
+      editorRestricted: false,
+      hideTitle: false,
+      hideAuthor: false,
+      assignedEditors: [],
+    }
+    setEditingSection(localSection)
     setShowSectionModal(true)
   }
 
   const handleCreateSection = () => {
-    setEditingSection({
-      id: Date.now().toString(),
+    if (!editingJournal) return
+    
+    const newSection: LocalSection = {
+      id: "", // Empty ID for new section
+      journalId: editingJournal.id,
       title: "",
       abbreviation: "",
       policy: "",
       wordCount: 0,
+      isActive: true,
+      sequence: sections.length,
       reviewFormId: "",
       isInactive: false,
       isPeerReviewed: true,
@@ -666,25 +605,69 @@ export default function HostedJournalsPage() {
       hideTitle: false,
       hideAuthor: false,
       assignedEditors: [],
-    })
+    }
+    setEditingSection(newSection)
     setShowSectionModal(true)
   }
 
-  const handleSaveSection = () => {
-    if (!editingSection) return
-    const exists = sections.find((s) => s.id === editingSection.id)
-    if (exists) {
-      setSections(sections.map((s) => (s.id === editingSection.id ? editingSection : s)))
-    } else {
-      setSections([...sections, editingSection])
+  const handleSaveSection = async () => {
+    if (!editingSection || !editingJournal) return
+    
+    try {
+      const token = typeof window !== "undefined" ? localStorage.getItem("auth_token") : null
+      if (!token) {
+        alert("Please login first")
+        return
+      }
+
+      const sectionData = {
+        title: editingSection.title,
+        abbreviation: editingSection.abbreviation,
+        policy: editingSection.policy || undefined,
+        wordCount: editingSection.wordCount || undefined,
+        isActive: editingSection.isActive ?? true,
+        sequence: editingSection.sequence ?? sections.length,
+      }
+
+      if (editingSection.id) {
+        // Update existing section
+        await apiPut<Section>(`/api/journals/${editingJournal.id}/sections/${editingSection.id}`, sectionData)
+      } else {
+        // Create new section
+        await apiPost<Section>(`/api/journals/${editingJournal.id}/sections`, sectionData)
+      }
+
+      // Reload sections
+      const updatedSections = await apiGet<Section[]>(`/api/journals/${editingJournal.id}/sections`)
+      setSections(updatedSections || [])
+      setShowSectionModal(false)
+      setEditingSection(null)
+    } catch (error: any) {
+      console.error("Failed to save section:", error)
+      alert(error.message || "Failed to save section")
     }
-    setShowSectionModal(false)
-    setEditingSection(null)
   }
 
-  const handleDeleteSection = (id: string) => {
-    setSections(sections.filter((s) => s.id !== id))
-    setExpandedSection(null)
+  const handleDeleteSection = async (id: string) => {
+    if (!editingJournal) return
+    
+    try {
+      const token = typeof window !== "undefined" ? localStorage.getItem("auth_token") : null
+      if (!token) {
+        alert("Please login first")
+        return
+      }
+
+      await apiDelete(`/api/journals/${editingJournal.id}/sections/${id}`)
+
+      // Reload sections
+      const updatedSections = await apiGet<Section[]>(`/api/journals/${editingJournal.id}/sections`)
+      setSections(updatedSections || [])
+      setExpandedSection(null)
+    } catch (error: any) {
+      console.error("Failed to delete section:", error)
+      alert(error.message || "Failed to delete section")
+    }
   }
 
   const handleEditCategory = (category: Category) => {
@@ -693,8 +676,11 @@ export default function HostedJournalsPage() {
   }
 
   const handleCreateCategory = () => {
+    if (!editingJournal) return
+    
     setEditingCategory({
-      id: Date.now().toString(),
+      id: `temp-${Date.now()}`,
+      journalId: editingJournal.id,
       name: "",
       path: "",
       parentId: null,
@@ -705,36 +691,117 @@ export default function HostedJournalsPage() {
     setShowCategoryModal(true)
   }
 
-  const handleSaveCategory = () => {
-    if (!editingCategory) return
-    const exists = categories.find((c) => c.id === editingCategory.id)
-    if (exists) {
-      setCategories(categories.map((c) => (c.id === editingCategory.id ? editingCategory : c)))
-    } else {
-      setCategories([...categories, editingCategory])
+  const handleSaveCategory = async () => {
+    if (!editingCategory || !editingJournal) return
+    
+    try {
+      const token = typeof window !== "undefined" ? localStorage.getItem("auth_token") : null
+      if (!token) {
+        alert("Please login first")
+        return
+      }
+
+      const categoryData = {
+        name: editingCategory.name,
+        path: editingCategory.path,
+        parentId: editingCategory.parentId || undefined,
+        description: editingCategory.description || undefined,
+        sortOption: editingCategory.sortOption || "datePublished",
+        image: editingCategory.image || undefined,
+      }
+
+      if (editingCategory.id && !editingCategory.id.startsWith("temp-")) {
+        // Update existing category
+        await apiPut(`/api/journals/${editingJournal.id}/categories/${editingCategory.id}`, categoryData)
+      } else {
+        // Create new category
+        await apiPost(`/api/journals/${editingJournal.id}/categories`, categoryData)
+      }
+
+      // Reload categories
+      const updatedCategories = await apiGet(`/api/journals/${editingJournal.id}/categories`)
+      setCategories(updatedCategories || [])
+      setShowCategoryModal(false)
+      setEditingCategory(null)
+    } catch (error: any) {
+      console.error("Failed to save category:", error)
+      alert(error.message || "Failed to save category")
     }
-    setShowCategoryModal(false)
-    setEditingCategory(null)
   }
 
-  const handleDeleteCategory = (id: string) => {
-    setCategories(categories.filter((c) => c.id !== id))
-    setExpandedCategory(null)
+  const handleDeleteCategory = async (id: string) => {
+    if (!editingJournal) return
+    
+    try {
+      const token = typeof window !== "undefined" ? localStorage.getItem("auth_token") : null
+      if (!token) {
+        alert("Please login first")
+        return
+      }
+
+      await apiDelete(`/api/journals/${editingJournal.id}/categories/${id}`)
+
+      // Reload categories
+      const updatedCategories = await apiGet(`/api/journals/${editingJournal.id}/categories`)
+      setCategories(updatedCategories || [])
+      setExpandedCategory(null)
+    } catch (error: any) {
+      console.error("Failed to delete category:", error)
+      alert(error.message || "Failed to delete category")
+    }
   }
 
   // Move section up/down
-  const moveSectionUp = (index: number) => {
-    if (index === 0) return
-    const newSections = [...sections]
-    ;[newSections[index - 1], newSections[index]] = [newSections[index], newSections[index - 1]]
-    setSections(newSections)
+  const moveSectionUp = async (index: number) => {
+    if (index === 0 || !editingJournal) return
+    
+    try {
+      const token = typeof window !== "undefined" ? localStorage.getItem("auth_token") : null
+      if (!token) {
+        alert("Please login first")
+        return
+      }
+
+      const newSections = [...sections]
+      ;[newSections[index - 1], newSections[index]] = [newSections[index], newSections[index - 1]]
+      
+      // Update sequence via API
+      const sectionIds = newSections.map((s) => s.id)
+      await apiPut(`/api/journals/${editingJournal.id}/sections/reorder`, { sectionIds })
+
+      // Reload sections
+      const updatedSections = await apiGet<Section[]>(`/api/journals/${editingJournal.id}/sections`)
+      setSections(updatedSections || [])
+    } catch (error: any) {
+      console.error("Failed to reorder sections:", error)
+      alert(error.message || "Failed to reorder sections")
+    }
   }
 
-  const moveSectionDown = (index: number) => {
-    if (index === sections.length - 1) return
-    const newSections = [...sections]
-    ;[newSections[index], newSections[index + 1]] = [newSections[index + 1], newSections[index]]
-    setSections(newSections)
+  const moveSectionDown = async (index: number) => {
+    if (index === sections.length - 1 || !editingJournal) return
+    
+    try {
+      const token = typeof window !== "undefined" ? localStorage.getItem("auth_token") : null
+      if (!token) {
+        alert("Please login first")
+        return
+      }
+
+      const newSections = [...sections]
+      ;[newSections[index], newSections[index + 1]] = [newSections[index + 1], newSections[index]]
+      
+      // Update sequence via API
+      const sectionIds = newSections.map((s) => s.id)
+      await apiPut(`/api/journals/${editingJournal.id}/sections/reorder`, { sectionIds })
+
+      // Reload sections
+      const updatedSections = await apiGet<Section[]>(`/api/journals/${editingJournal.id}/sections`)
+      setSections(updatedSections || [])
+    } catch (error: any) {
+      console.error("Failed to reorder sections:", error)
+      alert(error.message || "Failed to reorder sections")
+    }
   }
 
   const tableOfContents = [
@@ -791,8 +858,11 @@ export default function HostedJournalsPage() {
   }
 
   const handleCreateComponent = () => {
+    if (!editingJournal) return
+    
     setEditingComponent({
-      id: Date.now().toString(),
+      id: `temp-${Date.now()}`,
+      journalId: editingJournal.id,
       name: "",
       fileType: "document",
       isRequired: false,
@@ -801,21 +871,62 @@ export default function HostedJournalsPage() {
     setShowComponentModal(true)
   }
 
-  const handleSaveComponent = () => {
-    if (!editingComponent) return
-    const exists = articleComponents.find((c) => c.id === editingComponent.id)
-    if (exists) {
-      setArticleComponents(articleComponents.map((c) => (c.id === editingComponent.id ? editingComponent : c)))
-    } else {
-      setArticleComponents([...articleComponents, editingComponent])
+  const handleSaveComponent = async () => {
+    if (!editingComponent || !editingJournal) return
+    
+    try {
+      const token = typeof window !== "undefined" ? localStorage.getItem("auth_token") : null
+      if (!token) {
+        alert("Please login first")
+        return
+      }
+
+      const componentData = {
+        name: editingComponent.name,
+        fileType: editingComponent.fileType,
+        isRequired: editingComponent.isRequired,
+        isMetadataDependent: editingComponent.isMetadataDependent,
+      }
+
+      if (editingComponent.id && !editingComponent.id.startsWith("temp-")) {
+        // Update existing component
+        await apiPut(`/api/journals/${editingJournal.id}/components/${editingComponent.id}`, componentData)
+      } else {
+        // Create new component
+        await apiPost(`/api/journals/${editingJournal.id}/components`, componentData)
+      }
+
+      // Reload components
+      const updatedComponents = await apiGet(`/api/journals/${editingJournal.id}/components`)
+      setArticleComponents(updatedComponents || [])
+      setShowComponentModal(false)
+      setEditingComponent(null)
+    } catch (error: any) {
+      console.error("Failed to save component:", error)
+      alert(error.message || "Failed to save component")
     }
-    setShowComponentModal(false)
-    setEditingComponent(null)
   }
 
-  const handleDeleteComponent = (id: string) => {
-    setArticleComponents(articleComponents.filter((c) => c.id !== id))
-    setExpandedComponent(null)
+  const handleDeleteComponent = async (id: string) => {
+    if (!editingJournal) return
+    
+    try {
+      const token = typeof window !== "undefined" ? localStorage.getItem("auth_token") : null
+      if (!token) {
+        alert("Please login first")
+        return
+      }
+
+      await apiDelete(`/api/journals/${editingJournal.id}/components/${id}`)
+
+      // Reload components
+      const updatedComponents = await apiGet(`/api/journals/${editingJournal.id}/components`)
+      setArticleComponents(updatedComponents || [])
+      setExpandedComponent(null)
+    } catch (error: any) {
+      console.error("Failed to delete component:", error)
+      alert(error.message || "Failed to delete component")
+    }
   }
 
   const handleRestoreComponentDefaults = () => {
@@ -844,25 +955,68 @@ export default function HostedJournalsPage() {
     setShowChecklistModal(true)
   }
 
-  const handleSaveChecklist = () => {
-    if (!editingChecklist) return
-    const exists = checklistItems.find((c) => c.id === editingChecklist.id)
-    if (exists) {
-      setChecklistItems(checklistItems.map((c) => (c.id === editingChecklist.id ? editingChecklist : c)))
-    } else {
-      setChecklistItems([...checklistItems, editingChecklist])
+  const handleSaveChecklist = async () => {
+    if (!editingChecklist || !editingJournal) return
+    
+    try {
+      const token = typeof window !== "undefined" ? localStorage.getItem("auth_token") : null
+      if (!token) {
+        alert("Please login first")
+        return
+      }
+
+      const checklistData = {
+        content: editingChecklist.content,
+        order: editingChecklist.order,
+        isActive: editingChecklist.isActive ?? true,
+      }
+
+      if (editingChecklist.id && !editingChecklist.id.startsWith("temp-")) {
+        // Update existing checklist item
+        await apiPut(`/api/journals/${editingJournal.id}/checklist/${editingChecklist.id}`, checklistData)
+      } else {
+        // Create new checklist item
+        await apiPost(`/api/journals/${editingJournal.id}/checklist`, checklistData)
+      }
+
+      // Reload checklist items
+      const updatedChecklist = await apiGet(`/api/journals/${editingJournal.id}/checklist`)
+      setChecklistItems(updatedChecklist || [])
+      setShowChecklistModal(false)
+      setEditingChecklist(null)
+    } catch (error: any) {
+      console.error("Failed to save checklist item:", error)
+      alert(error.message || "Failed to save checklist item")
     }
-    setShowChecklistModal(false)
-    setEditingChecklist(null)
   }
 
-  const handleDeleteChecklist = (id: string) => {
-    setChecklistItems(checklistItems.filter((c) => c.id !== id))
+  const handleDeleteChecklist = async (id: string) => {
+    if (!editingJournal) return
+    
+    try {
+      const token = typeof window !== "undefined" ? localStorage.getItem("auth_token") : null
+      if (!token) {
+        alert("Please login first")
+        return
+      }
+
+      await apiDelete(`/api/journals/${editingJournal.id}/checklist/${id}`)
+
+      // Reload checklist items
+      const updatedChecklist = await apiGet(`/api/journals/${editingJournal.id}/checklist`)
+      setChecklistItems(updatedChecklist || [])
+    } catch (error: any) {
+      console.error("Failed to delete checklist item:", error)
+      alert(error.message || "Failed to delete checklist item")
+    }
   }
 
   const handleCreateReviewForm = () => {
+    if (!editingJournal) return
+    
     setEditingReviewForm({
-      id: Date.now().toString(),
+      id: `temp-${Date.now()}`,
+      journalId: editingJournal.id,
       title: "",
       description: "",
       isActive: true,
@@ -870,24 +1024,50 @@ export default function HostedJournalsPage() {
     setShowReviewFormModal(true)
   }
 
-  const handleSaveReviewForm = () => {
-    if (!editingReviewForm) return
-    const exists = reviewForms.find((f) => f.id === editingReviewForm.id)
-    if (exists) {
-      setReviewForms(reviewForms.map((f) => (f.id === editingReviewForm.id ? editingReviewForm : f)))
-    } else {
-      setReviewForms([...reviewForms, editingReviewForm])
+  const handleSaveReviewForm = async () => {
+    if (!editingReviewForm || !editingJournal) return
+    
+    try {
+      const token = typeof window !== "undefined" ? localStorage.getItem("auth_token") : null
+      if (!token) {
+        alert("Please login first")
+        return
+      }
+
+      const reviewFormData = {
+        title: editingReviewForm.title,
+        description: editingReviewForm.description || undefined,
+        isActive: editingReviewForm.isActive ?? true,
+      }
+
+      if (editingReviewForm.id && !editingReviewForm.id.startsWith("temp-")) {
+        // Update existing review form
+        await apiPut(`/api/journals/${editingJournal.id}/review-forms/${editingReviewForm.id}`, reviewFormData)
+      } else {
+        // Create new review form
+        await apiPost(`/api/journals/${editingJournal.id}/review-forms`, reviewFormData)
+      }
+
+      // Reload review forms
+      const updatedForms = await apiGet(`/api/journals/${editingJournal.id}/review-forms`)
+      setReviewForms(updatedForms || [])
+      setShowReviewFormModal(false)
+      setEditingReviewForm(null)
+    } catch (error: any) {
+      console.error("Failed to save review form:", error)
+      alert(error.message || "Failed to save review form")
     }
-    setShowReviewFormModal(false)
-    setEditingReviewForm(null)
   }
 
   const handleCreateDocument = () => {
+    if (!editingJournal) return
+    
     setEditingDocument({
-      id: Date.now().toString(),
+      id: `temp-${Date.now()}`,
+      journalId: editingJournal.id,
       name: "",
       type: "other",
-      dateUploaded: new Date().toISOString().split("T")[0],
+      dateUploaded: new Date().toISOString(),
       isPublic: false,
     })
     setShowDocumentModal(true)
@@ -910,18 +1090,90 @@ export default function HostedJournalsPage() {
     setShowEmailModal(true)
   }
 
-  const handleSaveEmail = () => {
-    if (!editingEmail) return
-    setEmailTemplates(emailTemplates.map((e) => (e.id === editingEmail.id ? editingEmail : e)))
-    setShowEmailModal(false)
-    setEditingEmail(null)
+  const handleSaveEmail = async () => {
+    if (!editingEmail || !editingJournal) return
+    
+    try {
+      const token = typeof window !== "undefined" ? localStorage.getItem("auth_token") : null
+      if (!token) {
+        alert("Please login first")
+        return
+      }
+
+      const emailData = {
+        name: editingEmail.name,
+        subject: editingEmail.subject,
+        body: editingEmail.body,
+        description: editingEmail.description || undefined,
+        isEnabled: editingEmail.isEnabled ?? true,
+      }
+
+      if (editingEmail.id && !editingEmail.id.startsWith("temp-")) {
+        // Update existing email template
+        await apiPut(`/api/journals/${editingJournal.id}/email-templates/${editingEmail.id}`, emailData)
+      } else {
+        // Create new email template
+        await apiPost(`/api/journals/${editingJournal.id}/email-templates`, emailData)
+      }
+
+      // Reload email templates
+      const updatedTemplates = await apiGet(`/api/journals/${editingJournal.id}/email-templates`)
+      setEmailTemplates(updatedTemplates || [])
+      setShowEmailModal(false)
+      setEditingEmail(null)
+    } catch (error: any) {
+      console.error("Failed to save email template:", error)
+      alert(error.message || "Failed to save email template")
+    }
+  }
+
+  const handleDeleteEmail = async (id: string) => {
+    if (!editingJournal) return
+    
+    try {
+      const token = typeof window !== "undefined" ? localStorage.getItem("auth_token") : null
+      if (!token) {
+        alert("Please login first")
+        return
+      }
+
+      await apiDelete(`/api/journals/${editingJournal.id}/email-templates/${id}`)
+
+      // Reload email templates
+      const updatedTemplates = await apiGet(`/api/journals/${editingJournal.id}/email-templates`)
+      setEmailTemplates(updatedTemplates || [])
+    } catch (error: any) {
+      console.error("Failed to delete email template:", error)
+      alert(error.message || "Failed to delete email template")
+    }
+  }
+
+  const handleDeleteReviewForm = async (id: string) => {
+    if (!editingJournal) return
+    
+    try {
+      const token = typeof window !== "undefined" ? localStorage.getItem("auth_token") : null
+      if (!token) {
+        alert("Please login first")
+        return
+      }
+
+      await apiDelete(`/api/journals/${editingJournal.id}/review-forms/${id}`)
+
+      // Reload review forms
+      const updatedForms = await apiGet(`/api/journals/${editingJournal.id}/review-forms`)
+      setReviewForms(updatedForms || [])
+    } catch (error: any) {
+      console.error("Failed to delete review form:", error)
+      alert(error.message || "Failed to delete review form")
+    }
   }
 
   const filteredEmails = emailTemplates.filter(
     (e) =>
       e.name.toLowerCase().includes(emailSearch.toLowerCase()) ||
       e.subject.toLowerCase().includes(emailSearch.toLowerCase()) ||
-      e.description.toLowerCase().includes(emailSearch.toLowerCase()),
+      (e.description || "").toLowerCase().includes(emailSearch.toLowerCase()),
   )
 
   return (
@@ -1491,9 +1743,16 @@ export default function HostedJournalsPage() {
 
                       {journalSettingsTab === "contact" && (
                         <div className="space-y-6">
+                          <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
+                            <p className="text-sm text-blue-800">
+                              <strong>Note:</strong> Only Contact Email will be saved to the database. Other contact fields are for display purposes only.
+                            </p>
+                          </div>
                           <div className="grid gap-6 md:grid-cols-2">
                             <div>
-                              <label className="block text-sm font-medium text-gray-700 mb-2">Contact Name</label>
+                              <label className="block text-sm font-medium text-gray-700 mb-2">
+                                Contact Name <span className="text-gray-400 text-xs">(Display only)</span>
+                              </label>
                               <input
                                 type="text"
                                 value={formData.contactName}
@@ -1502,12 +1761,15 @@ export default function HostedJournalsPage() {
                               />
                             </div>
                             <div>
-                              <label className="block text-sm font-medium text-gray-700 mb-2">Contact Email</label>
+                              <label className="block text-sm font-medium text-gray-700 mb-2">
+                                Contact Email <span className="text-red-500">*</span>
+                              </label>
                               <input
                                 type="email"
                                 value={formData.contactEmail}
                                 onChange={(e) => setFormData({ ...formData, contactEmail: e.target.value })}
                                 className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#1e5a5a] focus:border-transparent"
+                                required
                               />
                             </div>
                           </div>
@@ -1808,6 +2070,11 @@ export default function HostedJournalsPage() {
 
                       {workflowTab === "review" && (
                         <div className="space-y-6">
+                          <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4">
+                            <p className="text-sm text-yellow-800">
+                              <strong>Note:</strong> Review settings are currently stored locally. This feature will be integrated with the database in a future update.
+                            </p>
+                          </div>
                           <p className="text-gray-600">Configure peer review settings</p>
                           <div className="grid gap-4 md:grid-cols-2">
                             <div>
@@ -1864,16 +2131,82 @@ export default function HostedJournalsPage() {
                                 <div>
                                   <span className="font-medium text-gray-900">{doc.name}</span>
                                   <span className="text-sm text-gray-500 ml-2">({doc.type})</span>
+                                  {doc.isPublic && (
+                                    <span className="ml-2 px-2 py-0.5 bg-green-100 text-green-700 text-xs rounded">
+                                      Public
+                                    </span>
+                                  )}
                                 </div>
-                                <span className="text-sm text-gray-500">{doc.dateUploaded}</span>
+                                <div className="flex items-center gap-2">
+                                  <span className="text-sm text-gray-500">
+                                    {new Date(doc.dateUploaded).toLocaleDateString()}
+                                  </span>
+                                  <button
+                                    onClick={() => {
+                                      setEditingDocument(doc)
+                                      setShowDocumentModal(true)
+                                    }}
+                                    className="p-1.5 text-gray-400 hover:text-blue-600"
+                                  >
+                                    <svg
+                                      xmlns="http://www.w3.org/2000/svg"
+                                      className="h-4 w-4"
+                                      viewBox="0 0 20 20"
+                                      fill="currentColor"
+                                    >
+                                      <path d="M13.586 3.586a2 2 0 112.828 2.828l-.793.793-2.828-2.828.793-.793zM11.379 5.793L3 14.172V17h2.828l8.38-8.379-2.83-2.828z" />
+                                    </svg>
+                                  </button>
+                                  <button
+                                    onClick={() => handleDeleteDocument(doc.id)}
+                                    className="p-1.5 text-gray-400 hover:text-red-600"
+                                  >
+                                    <svg
+                                      xmlns="http://www.w3.org/2000/svg"
+                                      className="h-4 w-4"
+                                      viewBox="0 0 20 20"
+                                      fill="currentColor"
+                                    >
+                                      <path
+                                        fillRule="evenodd"
+                                        d="M9 2a1 1 0 00-.894.553L7.382 4H4a1 1 0 000 2v10a2 2 0 002 2h8a2 2 0 002-2V6a1 1 0 100-2h-3.382l-.724-1.447A1 1 0 0011 2H9zM7 8a1 1 0 012 0v6a1 1 0 11-2 0V8a1 1 0 00-1-1z"
+                                        clipRule="evenodd"
+                                      />
+                                    </svg>
+                                  </button>
+                                </div>
                               </div>
                             ))}
+                            {libraryDocuments.length === 0 && (
+                              <p className="text-gray-500 text-center py-8">No library documents uploaded yet.</p>
+                            )}
                           </div>
                         </div>
                       )}
 
                       {workflowTab === "emails" && (
                         <div className="space-y-6">
+                          <div className="flex justify-between items-center">
+                            <p className="text-gray-600">Manage email templates for automated notifications</p>
+                            <button
+                              onClick={() => {
+                                if (!editingJournal) return
+                                setEditingEmail({
+                                  id: `temp-${Date.now()}`,
+                                  journalId: editingJournal.id,
+                                  name: "",
+                                  subject: "",
+                                  body: "",
+                                  description: "",
+                                  isEnabled: true,
+                                })
+                                setShowEmailModal(true)
+                              }}
+                              className="inline-flex items-center gap-2 px-4 py-2 bg-[#1e5a5a] text-white rounded-lg hover:bg-[#174a4a] transition-colors text-sm font-medium"
+                            >
+                              Add Email Template
+                            </button>
+                          </div>
                           <div className="flex items-center gap-4">
                             <input
                               type="text"
@@ -1893,21 +2226,50 @@ export default function HostedJournalsPage() {
                                   <span className="font-medium text-gray-900 block truncate">{email.subject}</span>
                                   <span className="text-sm text-gray-500 block truncate">{email.description}</span>
                                 </div>
-                                <button
-                                  onClick={() => handleEditEmail(email)}
-                                  className="ml-4 p-2 text-gray-400 hover:text-blue-600 shrink-0"
-                                >
-                                  <svg
-                                    xmlns="http://www.w3.org/2000/svg"
-                                    className="h-4 w-4"
-                                    viewBox="0 0 20 20"
-                                    fill="currentColor"
+                                <div className="flex items-center gap-2 ml-4 shrink-0">
+                                  {!email.isEnabled && (
+                                    <span className="px-2 py-0.5 bg-gray-100 text-gray-700 text-xs rounded">
+                                      Disabled
+                                    </span>
+                                  )}
+                                  <button
+                                    onClick={() => handleEditEmail(email)}
+                                    className="p-2 text-gray-400 hover:text-blue-600"
                                   >
-                                    <path d="M13.586 3.586a2 2 0 112.828 2.828l-.793.793-2.828-2.828.793-.793zM11.379 5.793L3 14.172V17h2.828l8.38-8.379-2.83-2.828z" />
-                                  </svg>
-                                </button>
+                                    <svg
+                                      xmlns="http://www.w3.org/2000/svg"
+                                      className="h-4 w-4"
+                                      viewBox="0 0 20 20"
+                                      fill="currentColor"
+                                    >
+                                      <path d="M13.586 3.586a2 2 0 112.828 2.828l-.793.793-2.828-2.828.793-.793zM11.379 5.793L3 14.172V17h2.828l8.38-8.379-2.83-2.828z" />
+                                    </svg>
+                                  </button>
+                                  <button
+                                    onClick={() => handleDeleteEmail(email.id)}
+                                    className="p-2 text-gray-400 hover:text-red-600"
+                                  >
+                                    <svg
+                                      xmlns="http://www.w3.org/2000/svg"
+                                      className="h-4 w-4"
+                                      viewBox="0 0 20 20"
+                                      fill="currentColor"
+                                    >
+                                      <path
+                                        fillRule="evenodd"
+                                        d="M9 2a1 1 0 00-.894.553L7.382 4H4a1 1 0 000 2v10a2 2 0 002 2h8a2 2 0 002-2V6a1 1 0 100-2h-3.382l-.724-1.447A1 1 0 0011 2H9zM7 8a1 1 0 012 0v6a1 1 0 11-2 0V8a1 1 0 00-1-1z"
+                                        clipRule="evenodd"
+                                      />
+                                    </svg>
+                                  </button>
+                                </div>
                               </div>
                             ))}
+                            {filteredEmails.length === 0 && (
+                              <p className="text-gray-500 text-center py-8">
+                                {emailSearch ? "No email templates found." : "No email templates configured yet."}
+                              </p>
+                            )}
                           </div>
                         </div>
                       )}
@@ -1915,17 +2277,102 @@ export default function HostedJournalsPage() {
                   </div>
                 )}
 
-                {/* Website Settings Placeholder */}
+                {/* Website Settings - Basic Configuration */}
                 {settingsTab === "website-settings" && (
                   <div className="bg-white rounded-xl border border-gray-200 p-6 mx-6 my-6">
-                    <p className="text-gray-600">Website settings coming soon...</p>
+                    <div className="space-y-6">
+                      <h2 className="text-lg font-semibold text-gray-900">Website Settings</h2>
+                      <div className="grid gap-6 md:grid-cols-2">
+                        <div>
+                          <label className="block text-sm font-medium text-gray-700 mb-2">Theme Color</label>
+                          <input
+                            type="color"
+                            defaultValue="#1e5a5a"
+                            className="w-full h-10 border border-gray-300 rounded-lg"
+                          />
+                        </div>
+                        <div>
+                          <label className="block text-sm font-medium text-gray-700 mb-2">Header Image</label>
+                          <input
+                            type="file"
+                            accept="image/*"
+                            className="w-full px-4 py-2 border border-gray-300 rounded-lg"
+                          />
+                        </div>
+                      </div>
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-2">Footer Text</label>
+                        <textarea
+                          rows={3}
+                          className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#1e5a5a] focus:border-transparent"
+                          placeholder="Enter footer text..."
+                        />
+                      </div>
+                      <div className="flex justify-end">
+                        <button className="px-6 py-2.5 bg-[#1e5a5a] text-white rounded-lg hover:bg-[#174a4a] transition-colors font-medium">
+                          Save Settings
+                        </button>
+                      </div>
+                    </div>
                   </div>
                 )}
 
-                {/* Distribution Settings Placeholder */}
+                {/* Distribution Settings */}
                 {settingsTab === "distribution-settings" && (
                   <div className="bg-white rounded-xl border border-gray-200 p-6 mx-6 my-6">
-                    <p className="text-gray-600">Distribution settings coming soon...</p>
+                    <div className="space-y-6">
+                      <h2 className="text-lg font-semibold text-gray-900">Distribution Settings</h2>
+                      <div className="space-y-4">
+                        <div className="flex items-center gap-2">
+                          <input
+                            type="checkbox"
+                            id="enableDoi"
+                            defaultChecked
+                            className="w-4 h-4 text-[#1e5a5a] rounded border-gray-300 focus:ring-[#1e5a5a]"
+                          />
+                          <label htmlFor="enableDoi" className="text-sm text-gray-700">
+                            Enable DOI Assignment
+                          </label>
+                        </div>
+                        <div className="flex items-center gap-2">
+                          <input
+                            type="checkbox"
+                            id="enableOaiPmh"
+                            defaultChecked
+                            className="w-4 h-4 text-[#1e5a5a] rounded border-gray-300 focus:ring-[#1e5a5a]"
+                          />
+                          <label htmlFor="enableOaiPmh" className="text-sm text-gray-700">
+                            Enable OAI-PMH Metadata Harvesting
+                          </label>
+                        </div>
+                        <div className="flex items-center gap-2">
+                          <input
+                            type="checkbox"
+                            id="enableCrossref"
+                            className="w-4 h-4 text-[#1e5a5a] rounded border-gray-300 focus:ring-[#1e5a5a]"
+                          />
+                          <label htmlFor="enableCrossref" className="text-sm text-gray-700">
+                            Enable Crossref Export
+                          </label>
+                        </div>
+                        <div className="flex items-center gap-2">
+                          <input
+                            type="checkbox"
+                            id="enableRss"
+                            defaultChecked
+                            className="w-4 h-4 text-[#1e5a5a] rounded border-gray-300 focus:ring-[#1e5a5a]"
+                          />
+                          <label htmlFor="enableRss" className="text-sm text-gray-700">
+                            Enable RSS Feeds
+                          </label>
+                        </div>
+                      </div>
+                      <div className="flex justify-end">
+                        <button className="px-6 py-2.5 bg-[#1e5a5a] text-white rounded-lg hover:bg-[#174a4a] transition-colors font-medium">
+                          Save Settings
+                        </button>
+                      </div>
+                    </div>
                   </div>
                 )}
               </div>
@@ -1962,16 +2409,34 @@ export default function HostedJournalsPage() {
                   className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#1e5a5a] focus:border-transparent"
                 />
               </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">Policy</label>
+                <textarea
+                  value={editingSection.policy || ""}
+                  onChange={(e) => setEditingSection({ ...editingSection, policy: e.target.value })}
+                  rows={4}
+                  className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#1e5a5a] focus:border-transparent"
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">Word Count (Optional)</label>
+                <input
+                  type="number"
+                  value={editingSection.wordCount || ""}
+                  onChange={(e) => setEditingSection({ ...editingSection, wordCount: parseInt(e.target.value) || 0 })}
+                  className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#1e5a5a] focus:border-transparent"
+                />
+              </div>
               <div className="flex items-center gap-2">
                 <input
                   type="checkbox"
-                  id="isPeerReviewed"
-                  checked={editingSection.isPeerReviewed}
-                  onChange={(e) => setEditingSection({ ...editingSection, isPeerReviewed: e.target.checked })}
+                  id="isActive"
+                  checked={editingSection.isActive}
+                  onChange={(e) => setEditingSection({ ...editingSection, isActive: e.target.checked })}
                   className="w-4 h-4 text-[#1e5a5a] rounded border-gray-300 focus:ring-[#1e5a5a]"
                 />
-                <label htmlFor="isPeerReviewed" className="text-sm text-gray-700">
-                  Peer Reviewed
+                <label htmlFor="isActive" className="text-sm text-gray-700">
+                  Active
                 </label>
               </div>
             </div>
@@ -2111,20 +2576,169 @@ export default function HostedJournalsPage() {
         </div>
       )}
 
+      {/* Review Form Modal */}
+      {showReviewFormModal && editingReviewForm && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-xl max-w-lg w-full max-h-[90vh] overflow-auto shadow-xl">
+            <div className="p-6 border-b border-gray-200">
+              <h3 className="text-lg font-semibold text-gray-900">
+                {reviewForms.find((f) => f.id === editingReviewForm.id) ? "Edit Review Form" : "Create Review Form"}
+              </h3>
+            </div>
+            <div className="p-6 space-y-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">Title</label>
+                <input
+                  type="text"
+                  value={editingReviewForm.title}
+                  onChange={(e) => setEditingReviewForm({ ...editingReviewForm, title: e.target.value })}
+                  className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#1e5a5a] focus:border-transparent"
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">Description</label>
+                <textarea
+                  value={editingReviewForm.description || ""}
+                  onChange={(e) => setEditingReviewForm({ ...editingReviewForm, description: e.target.value })}
+                  rows={4}
+                  className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#1e5a5a] focus:border-transparent"
+                />
+              </div>
+              <div className="flex items-center gap-2">
+                <input
+                  type="checkbox"
+                  id="reviewFormActive"
+                  checked={editingReviewForm.isActive}
+                  onChange={(e) => setEditingReviewForm({ ...editingReviewForm, isActive: e.target.checked })}
+                  className="w-4 h-4 text-[#1e5a5a] rounded border-gray-300 focus:ring-[#1e5a5a]"
+                />
+                <label htmlFor="reviewFormActive" className="text-sm text-gray-700">
+                  Active
+                </label>
+              </div>
+            </div>
+            <div className="p-6 border-t border-gray-200 flex gap-3 justify-end">
+              <button
+                onClick={() => {
+                  setShowReviewFormModal(false)
+                  setEditingReviewForm(null)
+                }}
+                className="px-4 py-2 text-gray-700 bg-gray-100 rounded-lg hover:bg-gray-200 font-medium"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleSaveReviewForm}
+                className="px-4 py-2 bg-[#1e5a5a] text-white rounded-lg hover:bg-[#174a4a] font-medium"
+              >
+                Save
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Library Document Modal */}
+      {showDocumentModal && editingDocument && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-xl max-w-lg w-full max-h-[90vh] overflow-auto shadow-xl">
+            <div className="p-6 border-b border-gray-200">
+              <h3 className="text-lg font-semibold text-gray-900">
+                {libraryDocuments.find((d) => d.id === editingDocument.id) ? "Edit Document" : "Create Document"}
+              </h3>
+            </div>
+            <div className="p-6 space-y-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">Name</label>
+                <input
+                  type="text"
+                  value={editingDocument.name}
+                  onChange={(e) => setEditingDocument({ ...editingDocument, name: e.target.value })}
+                  className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#1e5a5a] focus:border-transparent"
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">Type</label>
+                <select
+                  value={editingDocument.type}
+                  onChange={(e) => setEditingDocument({ ...editingDocument, type: e.target.value as any })}
+                  className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#1e5a5a] focus:border-transparent bg-white"
+                >
+                  <option value="marketing">Marketing</option>
+                  <option value="permission">Permission</option>
+                  <option value="report">Report</option>
+                  <option value="other">Other</option>
+                </select>
+              </div>
+              <div className="flex items-center gap-2">
+                <input
+                  type="checkbox"
+                  id="documentPublic"
+                  checked={editingDocument.isPublic}
+                  onChange={(e) => setEditingDocument({ ...editingDocument, isPublic: e.target.checked })}
+                  className="w-4 h-4 text-[#1e5a5a] rounded border-gray-300 focus:ring-[#1e5a5a]"
+                />
+                <label htmlFor="documentPublic" className="text-sm text-gray-700">
+                  Public (visible to all users)
+                </label>
+              </div>
+            </div>
+            <div className="p-6 border-t border-gray-200 flex gap-3 justify-end">
+              <button
+                onClick={() => {
+                  setShowDocumentModal(false)
+                  setEditingDocument(null)
+                }}
+                className="px-4 py-2 text-gray-700 bg-gray-100 rounded-lg hover:bg-gray-200 font-medium"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleSaveDocument}
+                className="px-4 py-2 bg-[#1e5a5a] text-white rounded-lg hover:bg-[#174a4a] font-medium"
+              >
+                Save
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Email Modal */}
       {showEmailModal && editingEmail && (
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
           <div className="bg-white rounded-xl max-w-2xl w-full max-h-[90vh] overflow-auto shadow-xl">
             <div className="p-6 border-b border-gray-200">
-              <h3 className="text-lg font-semibold text-gray-900">Edit Email Template</h3>
+              <h3 className="text-lg font-semibold text-gray-900">
+                {emailTemplates.find((e) => e.id === editingEmail.id) ? "Edit Email Template" : "Create Email Template"}
+              </h3>
             </div>
             <div className="p-6 space-y-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">Name</label>
+                <input
+                  type="text"
+                  value={editingEmail.name}
+                  onChange={(e) => setEditingEmail({ ...editingEmail, name: e.target.value })}
+                  className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#1e5a5a] focus:border-transparent"
+                  placeholder="e.g., SUBMISSION_ACK"
+                />
+              </div>
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-2">Subject</label>
                 <input
                   type="text"
                   value={editingEmail.subject}
                   onChange={(e) => setEditingEmail({ ...editingEmail, subject: e.target.value })}
+                  className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#1e5a5a] focus:border-transparent"
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">Description</label>
+                <input
+                  type="text"
+                  value={editingEmail.description || ""}
+                  onChange={(e) => setEditingEmail({ ...editingEmail, description: e.target.value })}
                   className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#1e5a5a] focus:border-transparent"
                 />
               </div>
@@ -2136,6 +2750,18 @@ export default function HostedJournalsPage() {
                   rows={8}
                   className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#1e5a5a] focus:border-transparent resize-none"
                 />
+              </div>
+              <div className="flex items-center gap-2">
+                <input
+                  type="checkbox"
+                  id="emailEnabled"
+                  checked={editingEmail.isEnabled}
+                  onChange={(e) => setEditingEmail({ ...editingEmail, isEnabled: e.target.checked })}
+                  className="w-4 h-4 text-[#1e5a5a] rounded border-gray-300 focus:ring-[#1e5a5a]"
+                />
+                <label htmlFor="emailEnabled" className="text-sm text-gray-700">
+                  Enabled
+                </label>
               </div>
             </div>
             <div className="p-6 border-t border-gray-200 flex gap-3 justify-end">

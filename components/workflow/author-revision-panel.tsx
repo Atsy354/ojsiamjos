@@ -139,30 +139,36 @@ export function AuthorRevisionPanel({ submissionId, onRevisionSubmitted }: Autho
     }
   }
 
-  const handleSubmitRevision = () => {
+  const handleSubmitRevision = async () => {
     handleSaveDraft()
 
-    if (revisionSubmission) {
-      revisionService.submitRevision(revisionSubmission.id)
-    } else {
-      const currentUser = userService.getCurrentUser()
-      if (!currentUser || !revisionRequest) return
+    try {
+      // Use API to resubmit
+      const { apiPost } = await import("@/lib/api/client")
+      
+      // Update submission status to under_review (creates new review round)
+      await apiPost(`/api/submissions/${submissionId}/resubmit`, {})
+      
+      // Upload files if any
+      for (const file of uploadedFiles) {
+        if (file instanceof File) {
+          const formData = new FormData()
+          formData.append("file", file)
+          formData.append("fileStage", "review")
+          
+          const { apiUploadFile } = await import("@/lib/api/client")
+          await apiUploadFile(`/api/submissions/${submissionId}/files`, file, {
+            fileStage: "review",
+          })
+        }
+      }
 
-      const newSubmission = revisionService.createSubmission({
-        revisionRequestId: revisionRequest.id,
-        submissionId,
-        authorId: currentUser.id,
-        responseToEditor,
-        responseToReviewers: reviewerResponses,
-        files: uploadedFiles,
-        status: "submitted",
-      })
-      revisionService.submitRevision(newSubmission.id)
+      setIsSubmitDialogOpen(false)
+      onRevisionSubmitted?.()
+    } catch (error: any) {
+      console.error("Failed to submit revision:", error)
+      alert(error.message || "Failed to submit revision")
     }
-
-    setIsSubmitDialogOpen(false)
-    loadData()
-    onRevisionSubmitted?.()
   }
 
   const formatDate = (dateString: string) => {

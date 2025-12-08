@@ -4,8 +4,9 @@ import { useState, useEffect } from "react"
 import { useRouter } from "next/navigation"
 import { DashboardLayout } from "@/components/layout/dashboard-layout"
 import { useAuth } from "@/lib/hooks/use-auth"
-import { useSubmissions } from "@/lib/hooks/use-submissions"
+import { apiPost, apiPut, apiGet, apiUploadFile } from "@/lib/api/client"
 import { sectionService, journalService, initializeStorage } from "@/lib/storage"
+import { toast } from "sonner"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -13,16 +14,16 @@ import { Textarea } from "@/components/ui/textarea"
 import { Label } from "@/components/ui/label"
 import { Badge } from "@/components/ui/badge"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
-import { ArrowLeft, Plus, X, Save, Send } from "lucide-react"
+import { ArrowLeft, Plus, X, Save, Send, Upload, FileText, Trash2 } from "lucide-react"
 import Link from "next/link"
 import type { Section, Author } from "@/lib/types"
 
 export default function NewSubmissionPage() {
   const router = useRouter()
   const { user } = useAuth()
-  const { createSubmission } = useSubmissions()
   const [mounted, setMounted] = useState(false)
   const [sections, setSections] = useState<Section[]>([])
+  const [journalId, setJournalId] = useState<string>("")
 
   // Form state
   const [title, setTitle] = useState("")
@@ -32,15 +33,64 @@ export default function NewSubmissionPage() {
   const [keywordInput, setKeywordInput] = useState("")
   const [authors, setAuthors] = useState<Author[]>([])
   const [isSubmitting, setIsSubmitting] = useState(false)
+  const [files, setFiles] = useState<File[]>([])
+  const [uploadingFiles, setUploadingFiles] = useState(false)
 
   useEffect(() => {
     initializeStorage()
     setMounted(true)
 
-    const journals = journalService.getAll()
-    if (journals.length > 0) {
-      setSections(sectionService.getByJournal(journals[0].id))
+    // Load journals and sections from API
+    const loadJournalsAndSections = async () => {
+      try {
+        // Check if we have a token first
+        const token = typeof window !== "undefined" ? localStorage.getItem("auth_token") : null
+        if (!token) {
+          console.warn("No auth token found, using localStorage fallback")
+          // Fallback to localStorage
+          const journals = journalService.getAll()
+          if (journals.length > 0) {
+            setJournalId(journals[0].id)
+            setSections(sectionService.getByJournal(journals[0].id))
+          }
+          return
+        }
+
+        // Try to get journals from API
+        const journals = await apiGet<any[]>("/api/journals")
+        if (journals && journals.length > 0) {
+          // Get sections for first journal
+          const journal = journals[0]
+          setJournalId(journal.id)
+          const journalDetail = await apiGet<any>(`/api/journals/${journal.id}`)
+          if (journalDetail && journalDetail.sections) {
+            setSections(journalDetail.sections.map((sec: any) => ({
+              id: sec.id,
+              title: sec.title,
+              abbreviation: sec.abbreviation,
+              journalId: sec.journalId,
+            })))
+          }
+        } else {
+          // Fallback to localStorage
+          const localJournals = journalService.getAll()
+          if (localJournals.length > 0) {
+            setJournalId(localJournals[0].id)
+            setSections(sectionService.getByJournal(localJournals[0].id))
+          }
+        }
+      } catch (err: any) {
+        console.error("Failed to load journals from API, using localStorage:", err)
+        // Fallback to localStorage
+        const journals = journalService.getAll()
+        if (journals.length > 0) {
+          setJournalId(journals[0].id)
+          setSections(sectionService.getByJournal(journals[0].id))
+        }
+      }
     }
+
+    loadJournalsAndSections()
 
     // Add current user as primary author
     if (user) {
@@ -96,29 +146,107 @@ export default function NewSubmissionPage() {
     }
   }
 
-  const handleSave = (submit: boolean) => {
+  const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
+    if (e.target.files) {
+      const newFiles = Array.from(e.target.files)
+      setFiles((prev) => [...prev, ...newFiles])
+    }
+  }
+
+  const handleRemoveFile = (index: number) => {
+    setFiles(files.filter((_, i) => i !== index))
+  }
+
+  const formatFileSize = (bytes: number) => {
+    if (bytes < 1024) return bytes + " B"
+    if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(1) + " KB"
+    return (bytes / (1024 * 1024)).toFixed(1) + " MB"
+  }
+
+  const handleSave = async (submit: boolean) => {
     if (!user || !title || !abstract || !sectionId) return
 
     setIsSubmitting(true)
 
-    const journals = journalService.getAll()
-    const submission = createSubmission({
-      journalId: journals[0]?.id || "",
-      sectionId,
-      title,
-      abstract,
-      keywords,
-      status: submit ? "submitted" : "incomplete",
-      submitterId: user.id,
-      authors,
-      files: [],
-      dateSubmitted: submit ? new Date().toISOString() : undefined,
-      locale: "en",
-      stageId: submit ? 1 : 0,
-      currentRound: 0,
-    })
+    try {
 
-    router.push(`/submissions/${submission.id}`)
+      if (!journalId || !sectionId) {
+        toast.error("Please select a journal and section")
+        setIsSubmitting(false)
+        return
+      }
+
+      // Validate authors
+      if (!authors || authors.length === 0) {
+        toast.error("Please add at least one author")
+        setIsSubmitting(false)
+        return
+      }
+
+      // Validate required author fields
+      const invalidAuthor = authors.find(
+        (auth) => !auth.firstName || !auth.lastName || !auth.email
+      )
+      if (invalidAuthor) {
+        toast.error("Please fill all required author fields (First Name, Last Name, Email)")
+        setIsSubmitting(false)
+        return
+      }
+
+      // Use API to create submission
+      const submission = await apiPost<any>("/api/submissions", {
+        journalId,
+        sectionId,
+        title: title.trim(),
+        abstract: abstract.trim(),
+        keywords: keywords || [],
+        locale: "en",
+        authors: authors.map((auth) => ({
+          firstName: auth.firstName.trim(),
+          lastName: auth.lastName.trim(),
+          email: auth.email.trim(),
+          affiliation: auth.affiliation?.trim() || undefined,
+          isPrimary: auth.isPrimary || false,
+          userId: auth.email === user.email ? user.id : undefined,
+        })),
+      })
+
+      // Upload files if any
+      if (files.length > 0) {
+        setUploadingFiles(true)
+        try {
+          for (const file of files) {
+            await apiUploadFile(
+              `/api/submissions/${submission.id}/files`,
+              file,
+              { fileStage: "submission" }
+            )
+          }
+          toast.success(`${files.length} file(s) uploaded successfully`)
+        } catch (fileError: any) {
+          console.error("File upload error:", fileError)
+          toast.error(`Some files failed to upload: ${fileError.message}`)
+        } finally {
+          setUploadingFiles(false)
+        }
+      }
+
+      // If submitting, update status
+      if (submit) {
+        await apiPut<any>(`/api/submissions/${submission.id}`, {
+          status: "submitted",
+        })
+        toast.success("Submission created and submitted successfully!")
+      } else {
+        toast.success("Draft saved successfully!")
+      }
+
+      router.push(`/submissions/${submission.id}`)
+    } catch (error: any) {
+      console.error("Submission error:", error)
+      toast.error(error.message || "Failed to create submission")
+      setIsSubmitting(false)
+    }
   }
 
   if (!mounted) {
@@ -224,6 +352,89 @@ export default function NewSubmissionPage() {
           </CardContent>
         </Card>
 
+        {/* Files Upload */}
+        <Card>
+          <CardHeader>
+            <div className="flex items-center justify-between">
+              <div>
+                <CardTitle>Manuscript Files</CardTitle>
+                <CardDescription>Upload your manuscript and supplementary files</CardDescription>
+              </div>
+            </div>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            {/* File Input */}
+            <div className="flex items-center gap-4">
+              <Input
+                type="file"
+                id="file-upload"
+                className="hidden"
+                multiple
+                accept=".pdf,.doc,.docx,.txt"
+                onChange={handleFileSelect}
+              />
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => document.getElementById("file-upload")?.click()}
+                className="w-full"
+              >
+                <Upload className="mr-2 h-4 w-4" />
+                Select Files
+              </Button>
+            </div>
+
+            {/* File List */}
+            {files.length > 0 && (
+              <div className="space-y-2">
+                <Label>Selected Files ({files.length})</Label>
+                <div className="rounded-lg border divide-y">
+                  {files.map((file, index) => (
+                    <div
+                      key={index}
+                      className="flex items-center justify-between p-3 hover:bg-muted/50"
+                    >
+                      <div className="flex items-center gap-3 flex-1 min-w-0">
+                        <FileText className="h-5 w-5 text-muted-foreground flex-shrink-0" />
+                        <div className="flex-1 min-w-0">
+                          <p className="text-sm font-medium truncate">{file.name}</p>
+                          <p className="text-xs text-muted-foreground">
+                            {formatFileSize(file.size)} • {file.type || "Unknown type"}
+                          </p>
+                        </div>
+                      </div>
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => handleRemoveFile(index)}
+                        className="ml-2"
+                      >
+                        <Trash2 className="h-4 w-4 text-destructive" />
+                      </Button>
+                    </div>
+                  ))}
+                </div>
+                <p className="text-xs text-muted-foreground">
+                  Supported formats: PDF, DOC, DOCX, TXT. Max file size: 50MB per file.
+                </p>
+              </div>
+            )}
+
+            {files.length === 0 && (
+              <div className="rounded-lg border-2 border-dashed p-8 text-center">
+                <Upload className="h-12 w-12 text-muted-foreground mx-auto mb-4" />
+                <p className="text-sm text-muted-foreground mb-2">
+                  No files selected. Click "Select Files" to upload your manuscript.
+                </p>
+                <p className="text-xs text-muted-foreground">
+                  You can upload files now or add them later after creating the submission.
+                </p>
+              </div>
+            )}
+          </CardContent>
+        </Card>
+
         {/* Authors */}
         <Card>
           <CardHeader>
@@ -298,13 +509,20 @@ export default function NewSubmissionPage() {
 
         {/* Actions */}
         <div className="flex items-center justify-end gap-3">
-          <Button variant="outline" onClick={() => handleSave(false)} disabled={isSubmitting}>
+          <Button 
+            variant="outline" 
+            onClick={() => handleSave(false)} 
+            disabled={isSubmitting || uploadingFiles}
+          >
             <Save className="mr-2 h-4 w-4" />
-            Save as Draft
+            {isSubmitting || uploadingFiles ? "Saving..." : "Save as Draft"}
           </Button>
-          <Button onClick={() => handleSave(true)} disabled={isSubmitting || !title || !abstract || !sectionId}>
+          <Button 
+            onClick={() => handleSave(true)} 
+            disabled={isSubmitting || uploadingFiles || !title || !abstract || !sectionId}
+          >
             <Send className="mr-2 h-4 w-4" />
-            Submit Manuscript
+            {isSubmitting || uploadingFiles ? "Submitting..." : "Submit Manuscript"}
           </Button>
         </div>
       </div>

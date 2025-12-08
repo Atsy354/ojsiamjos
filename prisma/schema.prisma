@@ -1,0 +1,554 @@
+// prisma/schema.prisma
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider  = "postgresql"
+  url       = env("DATABASE_URL")
+  directUrl = env("DIRECT_URL")
+}
+
+enum UserRole {
+  admin
+  editor
+  author
+  reviewer
+  reader
+  copyeditor
+  proofreader
+  layout_editor
+  subscription_manager
+}
+
+enum SubmissionStatus {
+  incomplete
+  submitted
+  under_review
+  revision_required
+  accepted
+  declined
+  published
+  copyediting
+  proofreading
+  production
+  scheduled
+}
+
+enum ReviewStatus {
+  pending
+  accepted
+  declined
+  completed
+}
+
+enum ReviewRecommendation {
+  accept
+  minor_revisions
+  major_revisions
+  resubmit_elsewhere
+  decline
+}
+
+model User {
+  id           String    @id @default(cuid())
+  email        String    @unique
+  password     String    // hashed password
+  firstName    String
+  lastName     String
+  affiliation  String?
+  orcid        String?   @unique
+  roles        UserRole[]
+  bio          String?   @db.Text
+  avatar       String?
+  journalId    String?
+  journal      Journal?  @relation(fields: [journalId], references: [id], onDelete: SetNull)
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+
+  // Relations
+  submissions      Submission[]          @relation("Submitter")
+  reviewAssignments ReviewAssignment[]
+  copyeditAssignments CopyeditingAssignment[]
+  proofreadAssignments ProofreadingAssignment[]
+  productionAssignments ProductionAssignment[]
+  editorialDecisions EditorialDecision[]
+  notifications    Notification[]
+
+  @@index([email])
+  @@index([journalId])
+  @@map("users")
+}
+
+model Journal {
+  id            String      @id @default(cuid())
+  path          String      @unique
+  name          String
+  acronym       String
+  description   String      @db.Text
+  issn          String?
+  publisher     String?
+  contactEmail  String
+  logo          String?
+  primaryLocale String      @default("en")
+  createdAt     DateTime    @default(now())
+  updatedAt     DateTime    @updatedAt
+
+  // Workflow Settings (stored as JSON)
+  workflowSettings Json? // Review settings, submission settings, etc.
+
+  // Relations
+  users         User[]
+  sections      Section[]
+  categories    Category[]
+  articleComponents ArticleComponent[]
+  checklistItems ChecklistItem[]
+  reviewForms   ReviewForm[]
+  libraryDocuments LibraryDocument[]
+  emailTemplates EmailTemplate[]
+  submissions   Submission[]
+  issues        Issue[]
+  announcements Announcement[]
+
+  @@index([path])
+  @@map("journals")
+}
+
+model Section {
+  id          String   @id @default(cuid())
+  journalId   String
+  journal     Journal  @relation(fields: [journalId], references: [id], onDelete: Cascade)
+  title       String
+  abbreviation String
+  policy      String?  @db.Text
+  wordCount   Int?
+  isActive    Boolean  @default(true)
+  sequence    Int      @default(0)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  submissions Submission[]
+
+  @@index([journalId])
+  @@map("sections")
+}
+
+model Submission {
+  id                 String            @id @default(cuid())
+  journalId          String
+  journal            Journal           @relation(fields: [journalId], references: [id], onDelete: Cascade)
+  sectionId          String
+  section            Section           @relation(fields: [sectionId], references: [id])
+  title              String
+  abstract           String            @db.Text
+  keywords           String[]
+  status             SubmissionStatus  @default(incomplete)
+  submitterId        String
+  submitter          User              @relation("Submitter", fields: [submitterId], references: [id])
+  dateSubmitted      DateTime?
+  dateStatusModified DateTime?
+  locale             String            @default("en")
+  stageId            Int               @default(1)
+  currentRound       Int               @default(1)
+  
+  // Rich content (stored as JSON)
+  sections           Json?             // ArticleSection[]
+  references         Json?             // ArticleReference[]
+  metrics            Json?             // ArticleMetrics
+  figures            Json?             // ArticleFigure[]
+  acknowledgments    String?           @db.Text
+  funding            String?           @db.Text
+  conflictOfInterest String?           @db.Text
+  version            Int               @default(1)
+  previousVersionId  String?
+
+  createdAt          DateTime          @default(now())
+  updatedAt          DateTime          @updatedAt
+
+  // Relations
+  authors            Author[]
+  files              SubmissionFile[]
+  reviewRounds       ReviewRound[]
+  reviewAssignments  ReviewAssignment[]
+  editorialDecisions EditorialDecision[]
+  copyeditAssignments CopyeditingAssignment[]
+  proofreadAssignments ProofreadingAssignment[]
+  productionAssignments ProductionAssignment[]
+  publications       Publication[]
+
+  @@index([journalId])
+  @@index([submitterId])
+  @@index([status])
+  @@index([dateSubmitted])
+  @@index([dateStatusModified])
+  @@map("submissions")
+}
+
+model Author {
+  id          String     @id @default(cuid())
+  submissionId String
+  submission  Submission @relation(fields: [submissionId], references: [id], onDelete: Cascade)
+  userId      String?
+  firstName   String
+  lastName    String
+  email       String
+  affiliation String?
+  orcid       String?
+  country     String?
+  isPrimary   Boolean    @default(false)
+  sequence    Int        @default(0)
+
+  @@index([submissionId])
+  @@map("authors")
+}
+
+model SubmissionFile {
+  id             String   @id @default(cuid())
+  submissionId   String
+  submission     Submission @relation(fields: [submissionId], references: [id], onDelete: Cascade)
+  fileName       String
+  fileType       String
+  fileSize       Int
+  filePath       String   // Path di Supabase Storage
+  fileUrl        String?  // Public URL atau signed URL dari Supabase Storage
+  fileStage      String   // submission | review | copyedit | production | proof
+  uploadedAt     DateTime @default(now())
+  uploadedById   String
+  revision       Int?
+  originalFileId String?
+
+  @@index([submissionId])
+  @@index([fileStage])
+  @@map("submission_files")
+}
+
+model ReviewRound {
+  id          String   @id @default(cuid())
+  submissionId String
+  submission  Submission @relation(fields: [submissionId], references: [id], onDelete: Cascade)
+  round       Int
+  status      String   // pending | reviews_completed | revisions_requested | etc
+  dateCreated DateTime @default(now())
+
+  reviewAssignments ReviewAssignment[]
+  editorialDecisions EditorialDecision[]
+
+  @@index([submissionId])
+  @@map("review_rounds")
+}
+
+model ReviewAssignment {
+  id                String             @id @default(cuid())
+  submissionId      String
+  submission        Submission         @relation(fields: [submissionId], references: [id], onDelete: Cascade)
+  reviewRoundId     String
+  reviewRound       ReviewRound        @relation(fields: [reviewRoundId], references: [id], onDelete: Cascade)
+  reviewerId        String
+  reviewer          User               @relation(fields: [reviewerId], references: [id])
+  status            ReviewStatus       @default(pending)
+  recommendation    ReviewRecommendation?
+  dateAssigned      DateTime           @default(now())
+  dateConfirmed     DateTime?
+  dateDue           DateTime?
+  dateCompleted     DateTime?
+  quality           Int?
+  comments          String?            @db.Text
+  commentsToEditor  String?            @db.Text
+
+  @@index([submissionId])
+  @@index([reviewerId])
+  @@index([status])
+  @@index([dateDue])
+  @@index([status, dateDue])
+  @@map("review_assignments")
+}
+
+model EditorialDecision {
+  id            String   @id @default(cuid())
+  submissionId  String
+  submission    Submission @relation(fields: [submissionId], references: [id], onDelete: Cascade)
+  reviewRoundId String?
+  reviewRound   ReviewRound? @relation(fields: [reviewRoundId], references: [id], onDelete: SetNull)
+  editorId      String
+  editor        User     @relation(fields: [editorId], references: [id])
+  decision      String   // accept | decline | request_revisions | etc
+  dateDecided   DateTime @default(now())
+  comments      String?  @db.Text
+
+  @@index([submissionId])
+  @@index([editorId])
+  @@map("editorial_decisions")
+}
+
+model CopyeditingAssignment {
+  id                 String   @id @default(cuid())
+  submissionId       String
+  submission         Submission @relation(fields: [submissionId], references: [id], onDelete: Cascade)
+  copyeditorId       String
+  copyeditor         User     @relation(fields: [copyeditorId], references: [id])
+  status             String   // pending | in_progress | author_review | completed
+  dateAssigned       DateTime @default(now())
+  dateDue            DateTime?
+  dateCompleted      DateTime?
+  instructions       String?  @db.Text
+  copyeditorComments String?  @db.Text
+  authorComments     String?  @db.Text
+
+  @@index([submissionId])
+  @@index([copyeditorId])
+  @@map("copyediting_assignments")
+}
+
+model ProofreadingAssignment {
+  id                  String   @id @default(cuid())
+  submissionId        String
+  submission          Submission @relation(fields: [submissionId], references: [id], onDelete: Cascade)
+  proofreaderId       String
+  proofreader         User     @relation(fields: [proofreaderId], references: [id])
+  status              String   // pending | in_progress | author_corrections | completed
+  dateAssigned        DateTime @default(now())
+  dateDue             DateTime?
+  dateCompleted       DateTime?
+  instructions        String?  @db.Text
+  proofreaderComments String?  @db.Text
+  authorCorrections   String?  @db.Text
+
+  @@index([submissionId])
+  @@index([proofreaderId])
+  @@map("proofreading_assignments")
+}
+
+model ProductionAssignment {
+  id             String   @id @default(cuid())
+  submissionId   String
+  submission     Submission @relation(fields: [submissionId], references: [id], onDelete: Cascade)
+  layoutEditorId String
+  layoutEditor   User     @relation(fields: [layoutEditorId], references: [id])
+  status         String   // pending | layout | galleys_ready | scheduled | published
+  dateAssigned   DateTime @default(now())
+  dateCompleted  DateTime?
+
+  galleys        Galley[]
+
+  @@index([submissionId])
+  @@index([layoutEditorId])
+  @@map("production_assignments")
+}
+
+model Galley {
+  id          String   @id @default(cuid())
+  submissionId String
+  productionAssignmentId String?
+  productionAssignment ProductionAssignment? @relation(fields: [productionAssignmentId], references: [id], onDelete: SetNull)
+  label       String
+  locale      String
+  fileId      String
+  fileName    String
+  fileType    String   // pdf | html | xml | epub
+  filePath    String
+  fileUrl     String?  // Public URL
+  sequence    Int      @default(0)
+  isRemote    Boolean  @default(false)
+  remoteUrl   String?
+
+  @@index([submissionId])
+  @@map("galleys")
+}
+
+model Issue {
+  id          String   @id @default(cuid())
+  journalId   String
+  journal     Journal  @relation(fields: [journalId], references: [id], onDelete: Cascade)
+  volume      Int
+  number      Int
+  year        Int
+  title       String?
+  description String?  @db.Text
+  coverImage  String?
+  datePublished DateTime?
+  isPublished Boolean  @default(false)
+  isCurrent   Boolean  @default(false)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  publications Publication[]
+
+  @@unique([journalId, volume, number, year])
+  @@index([journalId])
+  @@map("issues")
+}
+
+model Publication {
+  id              String   @id @default(cuid())
+  submissionId    String   @unique
+  submission      Submission @relation(fields: [submissionId], references: [id], onDelete: Cascade)
+  issueId         String?
+  issue           Issue?   @relation(fields: [issueId], references: [id], onDelete: SetNull)
+  title           String
+  abstract        String   @db.Text
+  keywords        String[]
+  pages           String?
+  doi             String?  @unique
+  datePublished   DateTime?
+  version         Int      @default(1)
+  previousVersionId String?
+  versionNotes    String?  @db.Text
+  isCurrentVersion Boolean @default(true)
+  status          String   // draft | scheduled | published
+  citations       Int      @default(0)
+  licenseUrl      String?
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  @@index([issueId])
+  @@index([status])
+  @@map("publications")
+}
+
+model Announcement {
+  id         String   @id @default(cuid())
+  journalId  String
+  journal    Journal  @relation(fields: [journalId], references: [id], onDelete: Cascade)
+  title      String
+  content    String   @db.Text
+  datePosted DateTime @default(now())
+  dateExpire DateTime?
+  isActive   Boolean  @default(true)
+
+  @@index([journalId])
+  @@index([isActive])
+  @@map("announcements")
+}
+
+model Notification {
+  id        String   @id @default(cuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  type      String
+  title     String
+  message   String   @db.Text
+  link      String?
+  isRead    Boolean  @default(false)
+  createdAt DateTime @default(now())
+
+  @@index([userId])
+  @@index([isRead])
+  @@map("notifications")
+}
+
+model PasswordResetToken {
+  id        String   @id @default(cuid())
+  userId    String
+  token     String   @unique
+  expiresAt DateTime
+  used      Boolean  @default(false)
+  createdAt DateTime @default(now())
+
+  @@index([token])
+  @@index([userId])
+  @@map("password_reset_tokens")
+}
+
+model Category {
+  id          String   @id @default(cuid())
+  journalId   String
+  journal     Journal  @relation(fields: [journalId], references: [id], onDelete: Cascade)
+  name        String
+  path        String
+  parentId    String?
+  parent      Category? @relation("CategoryParent", fields: [parentId], references: [id], onDelete: Cascade)
+  children    Category[] @relation("CategoryParent")
+  description String?  @db.Text
+  sortOption  String   @default("datePublished") // datePublished | title
+  image       String?
+  sequence    Int      @default(0)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@index([journalId])
+  @@index([parentId])
+  @@map("categories")
+}
+
+model ArticleComponent {
+  id                String   @id @default(cuid())
+  journalId         String
+  journal           Journal  @relation(fields: [journalId], references: [id], onDelete: Cascade)
+  name              String
+  fileType          String   // document | artwork | supplementary
+  isRequired        Boolean  @default(false)
+  isMetadataDependent Boolean @default(false)
+  sequence          Int      @default(0)
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+
+  @@index([journalId])
+  @@map("article_components")
+}
+
+model ChecklistItem {
+  id          String   @id @default(cuid())
+  journalId   String
+  journal     Journal  @relation(fields: [journalId], references: [id], onDelete: Cascade)
+  content     String   @db.Text
+  order       Int      @default(0)
+  isActive    Boolean  @default(true)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@index([journalId])
+  @@index([order])
+  @@map("checklist_items")
+}
+
+model ReviewForm {
+  id          String   @id @default(cuid())
+  journalId   String
+  journal     Journal  @relation(fields: [journalId], references: [id], onDelete: Cascade)
+  title       String
+  description String?  @db.Text
+  isActive    Boolean  @default(true)
+  sequence    Int      @default(0)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@index([journalId])
+  @@map("review_forms")
+}
+
+model LibraryDocument {
+  id          String   @id @default(cuid())
+  journalId   String
+  journal     Journal  @relation(fields: [journalId], references: [id], onDelete: Cascade)
+  name        String
+  type        String   // marketing | permission | report | other
+  filePath    String?  // Path in Supabase Storage
+  fileUrl     String?  // Public URL
+  dateUploaded DateTime @default(now())
+  isPublic    Boolean  @default(false)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@index([journalId])
+  @@index([type])
+  @@map("library_documents")
+}
+
+model EmailTemplate {
+  id          String   @id @default(cuid())
+  journalId   String
+  journal     Journal  @relation(fields: [journalId], references: [id], onDelete: Cascade)
+  name        String
+  subject     String
+  body        String   @db.Text
+  description String?  @db.Text
+  isEnabled   Boolean  @default(true)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@index([journalId])
+  @@index([isEnabled])
+  @@map("email_templates")
+}
+
+

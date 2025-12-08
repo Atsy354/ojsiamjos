@@ -3,8 +3,10 @@
 import { useEffect, useState } from "react"
 import { DashboardLayout } from "@/components/layout/dashboard-layout"
 import { useAuth } from "@/lib/hooks/use-auth"
-import { useReviews } from "@/lib/hooks/use-reviews"
-import { submissionService, userService, initializeStorage } from "@/lib/storage"
+import { useReviewsAPI } from "@/lib/hooks/use-reviews-api"
+import { apiGet } from "@/lib/api/client"
+import { initializeStorage } from "@/lib/storage"
+import { toast } from "sonner"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
@@ -28,7 +30,7 @@ import type { ReviewAssignment, Submission, ReviewRecommendation } from "@/lib/t
 
 export default function ReviewsPage() {
   const { user, isEditor, isReviewer } = useAuth()
-  const { assignments, acceptReview, declineReview, submitReview, isLoading } = useReviews(
+  const { assignments, acceptReview, declineReview, submitReview, isLoading, refetch } = useReviewsAPI(
     isReviewer ? user?.id : undefined,
   )
   const [mounted, setMounted] = useState(false)
@@ -42,13 +44,21 @@ export default function ReviewsPage() {
     initializeStorage()
     setMounted(true)
 
-    // Load submissions for review assignments
-    const subs = submissionService.getAll()
-    const subMap: Record<string, Submission> = {}
-    subs.forEach((s) => {
-      subMap[s.id] = s
-    })
-    setSubmissions(subMap)
+    // Load submissions for review assignments from API
+    const loadSubmissions = async () => {
+      try {
+        const subs = await apiGet<Submission[]>("/api/submissions")
+        const subMap: Record<string, Submission> = {}
+        subs.forEach((s) => {
+          subMap[s.id] = s
+        })
+        setSubmissions(subMap)
+      } catch (err) {
+        console.error("Failed to load submissions:", err)
+      }
+    }
+    
+    loadSubmissions()
   }, [])
 
   if (!mounted || isLoading) {
@@ -65,26 +75,44 @@ export default function ReviewsPage() {
   const activeAssignments = assignments.filter((a) => a.status === "accepted")
   const completedAssignments = assignments.filter((a) => a.status === "completed")
 
-  const handleAccept = (id: string) => {
-    acceptReview(id)
+  const handleAccept = async (id: string) => {
+    try {
+      await acceptReview(id)
+      toast.success("Review accepted")
+      refetch()
+    } catch (error: any) {
+      toast.error(error.message || "Failed to accept review")
+    }
   }
 
-  const handleDecline = (id: string) => {
-    declineReview(id)
+  const handleDecline = async (id: string) => {
+    try {
+      await declineReview(id)
+      toast.success("Review declined")
+      refetch()
+    } catch (error: any) {
+      toast.error(error.message || "Failed to decline review")
+    }
   }
 
-  const handleSubmitReview = () => {
+  const handleSubmitReview = async () => {
     if (!reviewDialog || !recommendation) return
-    submitReview(reviewDialog.id, recommendation, comments, commentsToEditor)
-    setReviewDialog(null)
-    setRecommendation("")
-    setComments("")
-    setCommentsToEditor("")
+    try {
+      await submitReview(reviewDialog.id, recommendation, comments, commentsToEditor)
+      toast.success("Review submitted successfully")
+      setReviewDialog(null)
+      setRecommendation("")
+      setComments("")
+      setCommentsToEditor("")
+      refetch()
+    } catch (error: any) {
+      toast.error(error.message || "Failed to submit review")
+    }
   }
 
   const ReviewCard = ({ assignment }: { assignment: ReviewAssignment }) => {
     const submission = submissions[assignment.submissionId]
-    const reviewer = userService.getById(assignment.reviewerId)
+    const reviewer = assignment.reviewer || { firstName: "Unknown", lastName: "Reviewer", email: "" }
 
     if (!submission) return null
 
