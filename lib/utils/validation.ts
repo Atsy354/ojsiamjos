@@ -1,106 +1,85 @@
-// Validation utilities for forms and data
+/**
+ * Validation Utilities
+ * 
+ * Client-side validation functions for authentication forms
+ */
 
-export function isValidEmail(email: string): boolean {
-  const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
-  return emailRegex.test(email)
+/**
+ * Validate email format
+ * @param email - Email address to validate
+ * @returns true if valid, false otherwise
+ */
+export function validateEmail(email: string): boolean {
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    return emailRegex.test(email);
 }
 
-export function isValidUrl(url: string): boolean {
-  try {
-    new URL(url)
-    return true
-  } catch {
-    return false
-  }
+/**
+ * Check password strength
+ * @param password - Password to check
+ * @returns Object with strength score (0-5) and requirements met
+ */
+export function checkPasswordStrength(password: string): {
+    score: number;
+    requirements: {
+        length: boolean;
+        uppercase: boolean;
+        lowercase: boolean;
+        number: boolean;
+        special: boolean;
+    };
+    message: string;
+} {
+    const requirements = {
+        length: password.length >= 8,
+        uppercase: /[A-Z]/.test(password),
+        lowercase: /[a-z]/.test(password),
+        number: /[0-9]/.test(password),
+        special: /[^A-Za-z0-9]/.test(password),
+    };
+
+    const score = Object.values(requirements).filter(Boolean).length;
+
+    let message = '';
+    if (score === 0) message = 'Very Weak';
+    else if (score === 1) message = 'Weak';
+    else if (score === 2) message = 'Fair';
+    else if (score === 3) message = 'Good';
+    else if (score === 4) message = 'Strong';
+    else message = 'Very Strong';
+
+    return { score, requirements, message };
 }
 
-export function isValidOrcid(orcid: string): boolean {
-  // ORCID format: 0000-0000-0000-000X (where X can be a digit or X)
-  const orcidRegex = /^\d{4}-\d{4}-\d{4}-\d{3}[\dX]$/
-  return orcidRegex.test(orcid)
+/**
+ * Validate password meets minimum requirements
+ * @param password - Password to validate
+ * @returns true if meets requirements, false otherwise
+ */
+export function validatePassword(password: string): boolean {
+    const { requirements } = checkPasswordStrength(password);
+    // Minimum requirements: length, uppercase, lowercase, number
+    return requirements.length && requirements.uppercase && requirements.lowercase && requirements.number;
 }
 
-export function isValidIssn(issn: string): boolean {
-  // ISSN format: 0000-0000
-  const issnRegex = /^\d{4}-\d{4}$/
-  return issnRegex.test(issn)
+/**
+ * Get password strength color for UI
+ * @param score - Strength score (0-5)
+ * @returns CSS color string
+ */
+export function getPasswordStrengthColor(score: number): string {
+    if (score <= 1) return '#d00a0a'; // Red (Submission)
+    if (score === 2) return '#e08914'; // Orange (Review)
+    if (score === 3) return '#006798'; // Blue (Copyediting)
+    return '#00b28d'; // Green (Production)
 }
 
-export function isValidDoi(doi: string): boolean {
-  // DOI format: 10.xxxx/xxxxx
-  const doiRegex = /^10\.\d{4,}\/\S+$/
-  return doiRegex.test(doi)
-}
-
-export function isNotEmpty(value: string | null | undefined): boolean {
-  return value !== null && value !== undefined && value.trim().length > 0
-}
-
-export function isMinLength(value: string, minLength: number): boolean {
-  return value.length >= minLength
-}
-
-export function isMaxLength(value: string, maxLength: number): boolean {
-  return value.length <= maxLength
-}
-
-export interface ValidationResult {
-  isValid: boolean
-  errors: string[]
-}
-
-export function validateSubmission(data: {
-  title?: string
-  abstract?: string
-  keywords?: string[]
-}): ValidationResult {
-  const errors: string[] = []
-
-  if (!isNotEmpty(data.title)) {
-    errors.push("Title is required")
-  } else if (!isMinLength(data.title!, 10)) {
-    errors.push("Title must be at least 10 characters")
-  }
-
-  if (!isNotEmpty(data.abstract)) {
-    errors.push("Abstract is required")
-  } else if (!isMinLength(data.abstract!, 100)) {
-    errors.push("Abstract must be at least 100 characters")
-  }
-
-  if (!data.keywords || data.keywords.length < 3) {
-    errors.push("At least 3 keywords are required")
-  }
-
-  return {
-    isValid: errors.length === 0,
-    errors,
-  }
-}
-
-export function validateUser(data: {
-  email?: string
-  firstName?: string
-  lastName?: string
-}): ValidationResult {
-  const errors: string[] = []
-
-  if (!isNotEmpty(data.email)) {
-    errors.push("Email is required")
-  } else if (!isValidEmail(data.email!)) {
-    errors.push("Invalid email format")
-  }
-
-  if (!isNotEmpty(data.firstName)) {
-    errors.push("First name is required")
-  }
-
-  if (!isNotEmpty(data.lastName)) {
-    errors.push("Last name is required")
-  }
-
-  return {
-    isValid: errors.length === 0,
-    errors,
-  }
+/**
+ * Validate return URL to prevent open redirect attacks
+ * @param url - URL to validate
+ * @returns true if safe, false otherwise
+ */
+export function validateReturnUrl(url: string): boolean {
+    // Must start with / but not //
+    return url.startsWith('/') && !url.startsWith('//');
 }

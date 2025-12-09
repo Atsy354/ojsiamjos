@@ -1,42 +1,48 @@
-// app/api/auth/me/route.ts
 import { NextRequest, NextResponse } from "next/server"
-import { authMiddleware } from "@/lib/auth/middleware"
-import { prisma } from "@/lib/prisma"
+import { createClient } from "@/lib/supabase/server"
 
-export const GET = authMiddleware(async (req) => {
+export async function GET(request: NextRequest) {
   try {
-    const user = await prisma.user.findUnique({
-      where: { id: req.user!.userId },
-      select: {
-        id: true,
-        email: true,
-        firstName: true,
-        lastName: true,
-        roles: true,
-        affiliation: true,
-        orcid: true,
-        bio: true,
-        avatar: true,
-        journalId: true,
-        createdAt: true,
-      },
-    })
+    const supabase = await createClient()
 
-    if (!user) {
+    // Get current session
+    const { data: { session }, error: sessionError } = await supabase.auth.getSession()
+
+    if (sessionError || !session) {
+      return NextResponse.json(
+        { error: "Unauthorized" },
+        { status: 401 }
+      )
+    }
+
+    // Get user details from database
+    const { data: user, error: userError } = await supabase
+      .from("users")
+      .select("*")
+      .eq("id", session.user.id)
+      .single()
+
+    if (userError || !user) {
       return NextResponse.json(
         { error: "User not found" },
         { status: 404 }
       )
     }
 
-    return NextResponse.json(user)
+    return NextResponse.json({
+      user: {
+        id: user.id,
+        email: user.email,
+        firstName: user.first_name,
+        lastName: user.last_name,
+        roles: user.roles || [],
+      },
+    })
   } catch (error) {
-    console.error("Get user error:", error)
+    console.error("Get current user error:", error)
     return NextResponse.json(
       { error: "Internal server error" },
       { status: 500 }
     )
   }
-})
-
-
+}

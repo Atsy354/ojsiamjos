@@ -1,101 +1,77 @@
-// app/api/journals/route.ts
 import { NextRequest, NextResponse } from "next/server"
-import { authMiddleware, AuthRequest, requireRole } from "@/lib/auth/middleware"
-import { prisma } from "@/lib/prisma"
-import { z } from "zod"
+import { createClient } from "@/lib/supabase/server"
 
-const createJournalSchema = z.object({
-  path: z.string().min(1, "Path is required").regex(/^[a-z0-9-]+$/, "Path must be lowercase alphanumeric with hyphens"),
-  name: z.string().min(1, "Name is required"),
-  acronym: z.string().min(1, "Acronym is required"),
-  description: z.string().min(1, "Description is required"),
-  issn: z.string().optional(),
-  publisher: z.string().optional(),
-  contactEmail: z.string().email("Invalid email address"),
-  logo: z.string().optional(),
-  primaryLocale: z.string().default("en"),
-})
-
-export const GET = authMiddleware(async (req: AuthRequest) => {
+// GET /api/journals - List all journals
+export async function GET(request: NextRequest) {
   try {
-    const journals = await prisma.journal.findMany({
-      include: {
-        _count: {
-          select: {
-            users: true,
-            submissions: true,
-            issues: true,
-            publications: true,
-          },
-        },
-      },
-      orderBy: {
-        createdAt: "desc",
-      },
-    })
+    const supabase = await createClient()
+
+    const { data: journals, error } = await supabase
+      .from("journals")
+      .select("*")
+      .order("name", { ascending: true })
+
+    if (error) {
+      return NextResponse.json(
+        { error: error.message },
+        { status: 500 }
+      )
+    }
 
     return NextResponse.json(journals)
-  } catch (error: any) {
+  } catch (error) {
     console.error("Get journals error:", error)
-    console.error("Error stack:", error.stack)
-    console.error("Error details:", JSON.stringify(error, null, 2))
-    
     return NextResponse.json(
-      { 
-        error: "Failed to fetch journals",
-        message: error.message || "Unknown error",
-        details: process.env.NODE_ENV === "development" ? error.stack : undefined
-      },
+      { error: "Internal server error" },
       { status: 500 }
     )
   }
-})
+}
 
-export const POST = requireRole(["admin"])(async (req: AuthRequest) => {
+// POST /api/journals - Create new journal
+export async function POST(request: NextRequest) {
   try {
-    const body = await req.json()
-    const data = createJournalSchema.parse(body)
+    const body = await request.json()
+    const supabase = await createClient()
 
-    // Check if journal with same path already exists
-    const existingJournal = await prisma.journal.findUnique({
-      where: { path: data.path },
-    })
+    // Validate required fields
+    const { name, acronym, path, description, contactEmail } = body
 
-    if (existingJournal) {
+    if (!name || !acronym || !path || !contactEmail) {
       return NextResponse.json(
-        { error: "Journal with this path already exists" },
+        { error: "Missing required fields" },
         { status: 400 }
       )
     }
 
-    const journal = await prisma.journal.create({
-      data: {
-        path: data.path,
-        name: data.name,
-        acronym: data.acronym,
-        description: data.description,
-        issn: data.issn,
-        publisher: data.publisher,
-        contactEmail: data.contactEmail,
-        logo: data.logo,
-        primaryLocale: data.primaryLocale,
-      },
-    })
+    const { data: journal, error } = await supabase
+      .from("journals")
+      .insert({
+        name,
+        acronym,
+        path,
+        description: description || "",
+        contact_email: contactEmail,
+        primary_locale: body.primaryLocale || "en",
+        issn: body.issn,
+        publisher: body.publisher,
+      })
+      .select()
+      .single()
+
+    if (error) {
+      return NextResponse.json(
+        { error: error.message },
+        { status: 500 }
+      )
+    }
 
     return NextResponse.json(journal, { status: 201 })
-  } catch (error: any) {
-    if (error instanceof z.ZodError) {
-      return NextResponse.json(
-        { error: "Invalid input", details: error.errors },
-        { status: 400 }
-      )
-    }
-
+  } catch (error) {
     console.error("Create journal error:", error)
     return NextResponse.json(
-      { error: "Failed to create journal" },
+      { error: "Internal server error" },
       { status: 500 }
     )
   }
-})
-
+}

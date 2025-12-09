@@ -74,6 +74,9 @@ model User {
   productionAssignments ProductionAssignment[]
   editorialDecisions EditorialDecision[]
   notifications    Notification[]
+  userGroups       UserGroup[]           // NEW: For RBAC compatibility
+  discussions      Discussion[]          // NEW: For discussions
+  discussionMessages DiscussionMessage[] // NEW: For discussion messages
 
   @@index([email])
   @@index([journalId])
@@ -109,6 +112,7 @@ model Journal {
   submissions   Submission[]
   issues        Issue[]
   announcements Announcement[]
+  userGroups    UserGroup[]           // NEW: For RBAC
 
   @@index([path])
   @@map("journals")
@@ -175,6 +179,7 @@ model Submission {
   proofreadAssignments ProofreadingAssignment[]
   productionAssignments ProductionAssignment[]
   publications       Publication[]
+  discussions        Discussion[]      // NEW: For discussions
 
   @@index([journalId])
   @@index([submitterId])
@@ -551,4 +556,90 @@ model EmailTemplate {
   @@map("email_templates")
 }
 
+// ============================================
+// NEW MODELS FOR BACKWARD COMPATIBILITY
+// ============================================
 
+// 1. UserGroup - For RBAC compatibility with old system
+model UserGroup {
+  id        String   @id @default(cuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  roleId    Int      // 1=admin, 2=manager, 3=editor, 4=reviewer, 5=author
+  journalId String?
+  journal   Journal? @relation(fields: [journalId], references: [id], onDelete: Cascade)
+  createdAt DateTime @default(now())
+  
+  @@index([userId])
+  @@index([roleId])
+  @@index([journalId])
+  @@map("user_user_groups")
+}
+
+// 2. WorkflowStage - Reference data for workflow stages
+model WorkflowStage {
+  id       Int    @id
+  name     String
+  sequence Int
+  
+  @@map("workflow_stages")
+}
+
+// 3. Discussion - For editor-author-reviewer communication
+model Discussion {
+  id           String   @id @default(cuid())
+  submissionId String
+  submission   Submission @relation(fields: [submissionId], references: [id], onDelete: Cascade)
+  topic        String
+  createdById  String
+  createdBy    User     @relation(fields: [createdById], references: [id])
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+  
+  messages     DiscussionMessage[]
+  
+  @@index([submissionId])
+  @@index([createdById])
+  @@map("discussions")
+}
+
+// 4. DiscussionMessage - Messages in discussions
+model DiscussionMessage {
+  id           String   @id @default(cuid())
+  discussionId String
+  discussion   Discussion @relation(fields: [discussionId], references: [id], onDelete: Cascade)
+  userId       String
+  user         User     @relation(fields: [userId], references: [id])
+  message      String   @db.Text
+  createdAt    DateTime @default(now())
+  
+  @@index([discussionId])
+  @@index([userId])
+  @@map("discussion_messages")
+}
+
+// 5. EventLog - Audit trail for all system events
+model EventLog {
+  id        String   @id @default(cuid())
+  userId    String?
+  eventType String   // submission_created, review_assigned, etc.
+  message   String   @db.Text
+  metadata  Json?    // Additional event data
+  ipAddress String?
+  userAgent String?
+  createdAt DateTime @default(now())
+  
+  @@index([userId])
+  @@index([eventType])
+  @@index([createdAt])
+  @@map("event_log")
+}
+
+// 6. SiteSetting - Site-wide configuration
+model SiteSetting {
+  id    String @id @default(cuid())
+  key   String @unique
+  value String @db.Text
+  
+  @@map("site_settings")
+}

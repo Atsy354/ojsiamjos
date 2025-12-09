@@ -1,81 +1,52 @@
-"use client"
-
-import React, { useState, useEffect, useMemo, useCallback } from "react"
-import type { ReactElement } from "react"
+import React from "react"
 import { Button } from "@/components/ui/button"
-import { Input } from "@/components/ui/input"
 import { Search, ArrowRight, BookOpen, Users, FileText, Globe, TrendingUp, Award } from "lucide-react"
 import Link from "next/link"
-import type { Journal } from "@/lib/types"
-import { journalService } from "@/lib/storage"
-import { SkeletonJournalCard } from "@/components/ui/skeleton-card"
+import { createClient } from "@/lib/supabase/server"
+import { JournalList } from "@/components/public/journal-list"
 
-const JournalCard = React.memo(function JournalCard({ journal }: { journal: Journal }) {
-  return (
-    <Link
-      href={`/browse/journal/${journal.path || journal.id}`}
-      className="group block rounded-xl border bg-card p-4 sm:p-6 hover:shadow-lg hover:border-primary/30 transition-all duration-300"
-    >
-      <div className="flex items-start gap-3 sm:gap-4">
-        <div className="w-12 h-12 sm:w-14 sm:h-14 rounded-lg bg-gradient-to-br from-primary to-accent flex items-center justify-center text-primary-foreground font-bold text-base sm:text-lg shrink-0">
-          {journal.acronym.slice(0, 2)}
-        </div>
-        <div className="flex-1 min-w-0">
-          <h3 className="font-semibold text-sm sm:text-base group-hover:text-primary transition-colors line-clamp-2">
-            {journal.name}
-          </h3>
-          <p className="text-xs sm:text-sm text-muted-foreground mt-1 line-clamp-2">{journal.description}</p>
-          <div className="flex flex-wrap items-center gap-1 sm:gap-2 mt-2 sm:mt-3 text-[10px] sm:text-xs text-muted-foreground">
-            <span className="bg-accent/10 px-2 py-0.5 rounded-full text-accent">{journal.acronym}</span>
-            <span className="hidden sm:inline">•</span>
-            <span className="hidden sm:inline">ISSN: {journal.issn || "Pending"}</span>
-          </div>
-        </div>
-      </div>
-    </Link>
-  )
-})
+export default async function LandingPage() {
+  let journals = []
+  let stats = {
+    totalSubmissions: 0,
+    totalUsers: 0,
+    totalPublications: 0,
+  }
 
-export default function LandingPage(): ReactElement {
-  const [journals, setJournals] = useState<Journal[]>([])
-  const [searchQuery, setSearchQuery] = useState("")
-  const [selectedCategory, setSelectedCategory] = useState("all")
-  const [isLoading, setIsLoading] = useState(true)
+  try {
+    const supabase = await createClient()
 
-  useEffect(() => {
-    const timer = setTimeout(() => {
-      const allJournals = journalService.getAll()
-      setJournals(allJournals)
-      setIsLoading(false)
-    }, 0)
-    return () => clearTimeout(timer)
-  }, [])
+    // Fetch real data from database with error handling
+    const { data: journalsData, error: journalsError } = await supabase
+      .from('journals')
+      .select('*')
+      .limit(6)
 
-  const filteredJournals = useMemo(() => {
-    return journals.filter((journal) => {
-      const matchesSearch =
-        journal.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        journal.acronym.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        journal.description.toLowerCase().includes(searchQuery.toLowerCase())
+    if (!journalsError && journalsData) {
+      journals = journalsData
+    }
 
-      const matchesCategory = selectedCategory === "all" || journal.category === selectedCategory
+    const { count: submissionsCount } = await supabase
+      .from('submissions')
+      .select('*', { count: 'exact', head: true })
 
-      return matchesSearch && matchesCategory
-    })
-  }, [searchQuery, journals, selectedCategory])
+    const { count: usersCount } = await supabase
+      .from('users')
+      .select('*', { count: 'exact', head: true })
 
-  const handleSearch = useCallback((e: React.FormEvent) => {
-    e.preventDefault()
-  }, [])
+    const { count: publicationsCount } = await supabase
+      .from('publications')
+      .select('*', { count: 'exact', head: true })
 
-  const stats = useMemo(
-    () => ({
-      totalSubmissions: 147,
-      totalUsers: 523,
-      totalPublications: 89,
-    }),
-    [],
-  )
+    stats = {
+      totalSubmissions: submissionsCount || 0,
+      totalUsers: usersCount || 0,
+      totalPublications: publicationsCount || 0,
+    }
+  } catch (error) {
+    console.error('Error fetching data:', error)
+    // Use fallback values (already set above)
+  }
 
   return (
     <div className="w-full overflow-x-hidden">
@@ -124,45 +95,7 @@ export default function LandingPage(): ReactElement {
             </div>
           </div>
 
-          <div className="max-w-2xl mx-auto mb-8 px-2 sm:px-0">
-            <form onSubmit={handleSearch} className="relative">
-              <div className="relative flex items-center bg-card border-2 border-border rounded-full hover:border-primary/50 focus-within:border-primary transition-colors shadow-lg">
-                <Search className="absolute left-3 sm:left-4 w-4 sm:w-5 h-4 sm:h-5 text-muted-foreground pointer-events-none" />
-                <Input
-                  type="text"
-                  placeholder="Search journals..."
-                  value={searchQuery}
-                  onChange={(e) => setSearchQuery(e.target.value)}
-                  className="pl-10 sm:pl-12 pr-20 sm:pr-28 py-3 sm:py-4 text-sm sm:text-base border-0 bg-transparent focus:outline-none focus:ring-0"
-                />
-                <Button type="submit" size="sm" className="absolute right-1.5 sm:right-2 rounded-full px-3 sm:px-5">
-                  <span className="hidden sm:inline">Search</span>
-                  <Search className="sm:hidden w-4 h-4" />
-                </Button>
-              </div>
-            </form>
-          </div>
-
-          <div className="flex flex-wrap justify-center gap-2 sm:gap-3 px-2">
-            <Link href="/browse">
-              <Button variant="outline" size="sm" className="rounded-full text-xs sm:text-sm bg-transparent">
-                <BookOpen className="w-3 h-3 sm:w-4 sm:h-4 mr-1 sm:mr-2" />
-                Browse All
-              </Button>
-            </Link>
-            <Link href="/submissions/new">
-              <Button variant="outline" size="sm" className="rounded-full text-xs sm:text-sm bg-transparent">
-                <FileText className="w-3 h-3 sm:w-4 sm:h-4 mr-1 sm:mr-2" />
-                Submit Paper
-              </Button>
-            </Link>
-            <Link href="/login">
-              <Button size="sm" className="rounded-full text-xs sm:text-sm">
-                Get Started
-                <ArrowRight className="w-3 h-3 sm:w-4 sm:h-4 ml-1 sm:ml-2" />
-              </Button>
-            </Link>
-          </div>
+          {/* Search moved to JournalList client component */}
         </div>
       </section>
 
@@ -182,30 +115,7 @@ export default function LandingPage(): ReactElement {
             </Link>
           </div>
 
-          {isLoading ? (
-            <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-4 sm:gap-6">
-              {Array.from({ length: 6 }).map((_, i) => (
-                <SkeletonJournalCard key={i} />
-              ))}
-            </div>
-          ) : filteredJournals.length === 0 ? (
-            <div className="text-center py-12 sm:py-16">
-              <Globe className="w-12 h-12 sm:w-16 sm:h-16 mx-auto mb-4 text-muted-foreground/50" />
-              <h3 className="text-lg sm:text-xl font-semibold mb-2">No journals found</h3>
-              <p className="text-sm sm:text-base text-muted-foreground mb-4">
-                Try adjusting your search or browse all journals
-              </p>
-              <Button variant="outline" onClick={() => setSearchQuery("")}>
-                Clear Search
-              </Button>
-            </div>
-          ) : (
-            <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-4 sm:gap-6">
-              {filteredJournals.slice(0, 6).map((journal) => (
-                <JournalCard key={journal.id} journal={journal} />
-              ))}
-            </div>
-          )}
+          <JournalList journals={journals || []} />
         </div>
       </section>
 

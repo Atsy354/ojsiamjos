@@ -12,8 +12,8 @@
   --popover: oklch(1 0 0);
   --popover-foreground: oklch(0.15 0.02 250);
 
-  /* Primary - Deep Academic Blue */
-  --primary: oklch(0.4 0.12 250);
+  /* Primary - OJS Blue (#1E6292) */
+  --primary: oklch(0.42 0.08 240);
   --primary-foreground: oklch(0.98 0 0);
 
   /* Secondary - Warm Gray */
@@ -42,10 +42,10 @@
 
   --border: oklch(0.9 0.01 250);
   --input: oklch(0.9 0.01 250);
-  --ring: oklch(0.4 0.12 250);
+  --ring: oklch(0.42 0.08 240);
 
   /* Chart colors */
-  --chart-1: oklch(0.4 0.12 250);
+  --chart-1: oklch(0.42 0.08 240);
   --chart-2: oklch(0.55 0.12 190);
   --chart-3: oklch(0.55 0.15 145);
   --chart-4: oklch(0.75 0.15 75);
@@ -53,14 +53,14 @@
 
   --radius: 0.5rem;
 
-  /* Sidebar */
-  --sidebar: oklch(0.18 0.03 250);
-  --sidebar-foreground: oklch(0.92 0.01 250);
+  /* Sidebar - OJS Blue */
+  --sidebar: oklch(0.42 0.08 240);
+  --sidebar-foreground: oklch(0.98 0.01 0);
   --sidebar-primary: oklch(0.55 0.12 190);
   --sidebar-primary-foreground: oklch(0.98 0 0);
-  --sidebar-accent: oklch(0.25 0.03 250);
-  --sidebar-accent-foreground: oklch(0.92 0.01 250);
-  --sidebar-border: oklch(0.28 0.03 250);
+  --sidebar-accent: oklch(0.48 0.08 240);
+  --sidebar-accent-foreground: oklch(0.98 0.01 0);
+  --sidebar-border: oklch(0.48 0.08 240);
   --sidebar-ring: oklch(0.55 0.12 190);
 }
 
@@ -162,9 +162,11 @@
   * {
     @apply border-border outline-ring/50;
   }
+
   body {
     @apply bg-background text-foreground;
   }
+
   /* Added global overflow prevention */
   html,
   body {

@@ -1,16 +1,9 @@
 // lib/prisma.ts
-import { PrismaClient } from "@prisma/client"
+// Temporary dummy export to prevent build errors
+// This file will be removed once all routes are migrated to Supabase
 
-const globalForPrisma = globalThis as unknown as {
-  prisma: PrismaClient | undefined
+export const prisma = {
+    // Dummy object - routes using this will need to be updated to use Supabase
+    $connect: async () => { },
+    $disconnect: async () => { },
 }
-
-export const prisma =
-  globalForPrisma.prisma ??
-  new PrismaClient({
-    log: process.env.NODE_ENV === "development" ? ["error", "warn"] : ["error"],
-  })
-
-if (process.env.NODE_ENV !== "production") globalForPrisma.prisma = prisma
-
-
