@@ -4,7 +4,7 @@ import { useEffect, useState } from "react"
 import { useParams } from "next/navigation"
 import { DashboardLayout } from "@/components/layout/dashboard-layout"
 import { useAuth } from "@/lib/hooks/use-auth"
-import { initializeStorage, submissionService, journalService, userService } from "@/lib/storage"
+import { apiGet, apiPatch, apiPost } from "@/lib/api/client"
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
@@ -32,51 +32,96 @@ export default function JournalReviewsPage() {
   const { user, isEditor, isReviewer } = useAuth()
   const [mounted, setMounted] = useState(false)
   const [journal, setJournal] = useState<Journal | null>(null)
-  const [assignments, setAssignments] = useState<ReviewAssignment[]>([])
+  const [assignments, setAssignments] = useState<any[]>([])
   const [submissions, setSubmissions] = useState<Record<string, Submission>>({})
-  const [reviewDialog, setReviewDialog] = useState<ReviewAssignment | null>(null)
+  const [reviewDialog, setReviewDialog] = useState<any | null>(null)
   const [recommendation, setRecommendation] = useState<ReviewRecommendation | "">("")
   const [comments, setComments] = useState("")
   const [commentsToEditor, setCommentsToEditor] = useState("")
   const [isLoading, setIsLoading] = useState(true)
 
   useEffect(() => {
-    initializeStorage()
     setMounted(true)
+    void loadData()
+  }, [journalId, user?.id, isReviewer])
 
-    // Find journal
-    const journals = journalService.getAll()
-    const foundJournal = journals.find((j) => j.path === journalId || j.id === journalId)
-    setJournal(foundJournal || null)
+  const toStrId = (v: any) => (v === null || v === undefined ? "" : String(v))
 
-    if (foundJournal) {
-      // Get submissions for this journal
-      const allSubmissions = submissionService.getAll()
-      const journalSubmissions = allSubmissions.filter((s) => s.journalId === foundJournal.id)
+  const normalizeAssignment = (a: any) => {
+    const id = toStrId(a?.id ?? a?.reviewAssignmentId ?? a?.review_assignment_id ?? a?.reviewAssignmentID)
+    const submissionId = toStrId(a?.submissionId ?? a?.submission_id ?? a?.submission?.id)
+    const reviewerId = toStrId(a?.reviewerId ?? a?.reviewer_id ?? a?.reviewer?.id)
 
+    const dateAssigned = a?.dateAssigned ?? a?.date_assigned
+    const dateDue = a?.dateDue ?? a?.date_due
+    const dateConfirmed = a?.dateConfirmed ?? a?.date_confirmed
+    const dateCompleted = a?.dateCompleted ?? a?.date_completed
+    const declined = Boolean(a?.declined)
+
+    let status: "pending" | "accepted" | "completed" | "declined" = "pending"
+    if (declined) status = "declined"
+    else if (dateCompleted) status = "completed"
+    else if (dateConfirmed) status = "accepted"
+
+    return {
+      ...a,
+      id,
+      submissionId,
+      reviewerId,
+      dateAssigned,
+      dateDue,
+      dateConfirmed,
+      dateCompleted,
+      declined,
+      status,
+    }
+  }
+
+  const loadData = async () => {
+    setIsLoading(true)
+    try {
+      // Resolve journal
+      const journals = await apiGet<Journal[]>("/api/journals")
+      const foundJournal = Array.isArray(journals)
+        ? journals.find((j: any) => String((j as any).path) === String(journalId) || String((j as any).id) === String(journalId))
+        : null
+      setJournal(foundJournal || null)
+
+      const foundJournalId = foundJournal ? ((foundJournal as any).journal_id || (foundJournal as any).id) : null
+      if (!foundJournalId) {
+        setSubmissions({})
+        setAssignments([])
+        return
+      }
+
+      // Load submissions for this journal (to scope reviews)
+      const subs = await apiGet<any[]>(`/api/submissions?journalId=${foundJournalId}`)
+      const safeSubs = Array.isArray(subs) ? subs : []
       const subMap: Record<string, Submission> = {}
-      journalSubmissions.forEach((s) => {
-        subMap[s.id] = s
+      safeSubs.forEach((s: any) => {
+        const sid = toStrId((s as any).id)
+        if (sid) subMap[sid] = s as any
       })
       setSubmissions(subMap)
 
-      // Collect all review assignments from journal submissions
-      const allAssignments: ReviewAssignment[] = []
-      journalSubmissions.forEach((sub) => {
-        if (sub.reviewAssignments) {
-          // Filter by reviewer if user is a reviewer
-          const relevantAssignments =
-            isReviewer && user?.id
-              ? sub.reviewAssignments.filter((a) => a.reviewerId === user.id)
-              : sub.reviewAssignments
-          allAssignments.push(...relevantAssignments)
-        }
-      })
-      setAssignments(allAssignments)
-    }
+      const submissionIds = new Set(Object.keys(subMap))
 
-    setIsLoading(false)
-  }, [journalId, user?.id, isReviewer])
+      // Load review assignments (reviewer sees their own, editor can see all)
+      const reviewsUrl = isReviewer && user?.id ? `/api/reviews?reviewerId=${user.id}` : "/api/reviews"
+      const raw = await apiGet<any[]>(reviewsUrl)
+      const safe = Array.isArray(raw) ? raw : []
+
+      const normalized = safe.map(normalizeAssignment)
+      const scoped = normalized.filter((a: any) => !submissionIds.size || submissionIds.has(toStrId(a.submissionId)))
+      setAssignments(scoped)
+    } catch (e) {
+      console.error("Failed to load review queue:", e)
+      setSubmissions({})
+      setAssignments([])
+    } finally {
+      setIsLoading(false)
+    }
+  }
 
   if (!mounted || isLoading) {
     return (
@@ -88,89 +133,56 @@ export default function JournalReviewsPage() {
     )
   }
 
-  const pendingAssignments = assignments.filter((a) => a.status === "pending")
-  const activeAssignments = assignments.filter((a) => a.status === "accepted")
-  const completedAssignments = assignments.filter((a) => a.status === "completed")
+  const pendingAssignments = assignments.filter((a: any) => a.status === "pending")
+  const activeAssignments = assignments.filter((a: any) => a.status === "accepted")
+  const completedAssignments = assignments.filter((a: any) => a.status === "completed")
 
   const handleAccept = (id: string) => {
-    // Find the submission containing this assignment
-    for (const sub of Object.values(submissions)) {
-      const assignment = sub.reviewAssignments?.find((a) => a.id === id)
-      if (assignment) {
-        const updatedAssignments = sub.reviewAssignments?.map((a) =>
-          a.id === id ? { ...a, status: "accepted" as const, dateResponded: new Date().toISOString() } : a,
-        )
-        submissionService.update(sub.id, { reviewAssignments: updatedAssignments })
-        setAssignments((prev) =>
-          prev.map((a) => (a.id === id ? { ...a, status: "accepted", dateResponded: new Date().toISOString() } : a)),
-        )
-        break
+    void (async () => {
+      try {
+        await apiPatch(`/api/reviews/${id}/respond`, { declined: false })
+        await loadData()
+      } catch (e) {
+        console.error("Failed to accept review:", e)
       }
-    }
+    })()
   }
 
   const handleDecline = (id: string) => {
-    for (const sub of Object.values(submissions)) {
-      const assignment = sub.reviewAssignments?.find((a) => a.id === id)
-      if (assignment) {
-        const updatedAssignments = sub.reviewAssignments?.map((a) =>
-          a.id === id ? { ...a, status: "declined" as const, dateResponded: new Date().toISOString() } : a,
-        )
-        submissionService.update(sub.id, { reviewAssignments: updatedAssignments })
-        setAssignments((prev) =>
-          prev.map((a) => (a.id === id ? { ...a, status: "declined", dateResponded: new Date().toISOString() } : a)),
-        )
-        break
+    void (async () => {
+      try {
+        await apiPatch(`/api/reviews/${id}/respond`, { declined: true })
+        await loadData()
+      } catch (e) {
+        console.error("Failed to decline review:", e)
       }
-    }
+    })()
   }
 
   const handleSubmitReview = () => {
     if (!reviewDialog || !recommendation) return
 
-    for (const sub of Object.values(submissions)) {
-      const assignment = sub.reviewAssignments?.find((a) => a.id === reviewDialog.id)
-      if (assignment) {
-        const updatedAssignments = sub.reviewAssignments?.map((a) =>
-          a.id === reviewDialog.id
-            ? {
-                ...a,
-                status: "completed" as const,
-                recommendation,
-                comments,
-                commentsToEditor,
-                dateCompleted: new Date().toISOString(),
-              }
-            : a,
-        )
-        submissionService.update(sub.id, { reviewAssignments: updatedAssignments })
-        setAssignments((prev) =>
-          prev.map((a) =>
-            a.id === reviewDialog.id
-              ? {
-                  ...a,
-                  status: "completed",
-                  recommendation,
-                  comments,
-                  commentsToEditor,
-                  dateCompleted: new Date().toISOString(),
-                }
-              : a,
-          ),
-        )
-        break
+    void (async () => {
+      try {
+        await apiPost(`/api/reviews/${reviewDialog.id}/submit`, {
+          recommendation,
+          comments,
+          commentsToEditor,
+        })
+        setReviewDialog(null)
+        setRecommendation("")
+        setComments("")
+        setCommentsToEditor("")
+        await loadData()
+      } catch (e) {
+        console.error("Failed to submit review:", e)
       }
-    }
-
-    setReviewDialog(null)
-    setRecommendation("")
-    setComments("")
-    setCommentsToEditor("")
+    })()
   }
 
-  const ReviewCard = ({ assignment }: { assignment: ReviewAssignment }) => {
-    const submission = submissions[assignment.submissionId]
-    const reviewer = userService.getById(assignment.reviewerId)
+  const ReviewCard = ({ assignment }: { assignment: any }) => {
+    const submission = submissions[toStrId(assignment.submissionId)] || (assignment.submission as any)
+    const reviewer = (assignment.reviewer as any) || null
 
     if (!submission) return null
 
@@ -201,12 +213,12 @@ export default function JournalReviewsPage() {
                 <div className="flex items-center gap-2">
                   <Avatar className="h-8 w-8">
                     <AvatarFallback>
-                      {reviewer.firstName[0]}
-                      {reviewer.lastName[0]}
+                      {(reviewer.firstName || reviewer.first_name || "?")[0]}
+                      {(reviewer.lastName || reviewer.last_name || "?")[0]}
                     </AvatarFallback>
                   </Avatar>
                   <span className="text-sm text-muted-foreground">
-                    {reviewer.firstName} {reviewer.lastName}
+                    {reviewer.firstName || reviewer.first_name || ""} {reviewer.lastName || reviewer.last_name || ""}
                   </span>
                 </div>
               )}
@@ -217,7 +229,7 @@ export default function JournalReviewsPage() {
           <div className="flex flex-wrap items-center gap-4 text-sm text-muted-foreground">
             <div className="flex items-center gap-1">
               <Calendar className="h-4 w-4" />
-              Assigned {formatDistanceToNow(new Date(assignment.dateAssigned), { addSuffix: true })}
+              Assigned {assignment.dateAssigned ? formatDistanceToNow(new Date(assignment.dateAssigned), { addSuffix: true }) : "-"}
             </div>
             {assignment.dateDue && (
               <div className="flex items-center gap-1">

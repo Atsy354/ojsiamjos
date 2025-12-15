@@ -1179,7 +1179,7 @@ export default function HostedJournalsPage() {
   return (
     <div className="flex flex-col min-h-screen bg-white">
       {/* Top Navigation Bar - Dark */}
-      <header className="h-10 bg-[#0f2b3d] text-white flex items-center px-4 shrink-0">
+      <header className="h-10 bg-primary text-white flex items-center px-4 shrink-0">
         <div className="flex items-center gap-6">
           <button className="flex items-center gap-2 text-sm font-medium hover:text-gray-200 transition-colors">
             IamJOS
@@ -1187,7 +1187,7 @@ export default function HostedJournalsPage() {
           </button>
           <button className="flex items-center gap-2 text-sm hover:text-gray-200 transition-colors">
             Tasks
-            <span className="bg-[#3498db] text-white text-xs px-1.5 py-0.5 rounded-full min-w-[20px] text-center">
+            <span className="bg-primary text-white text-xs px-1.5 py-0.5 rounded-full min-w-[20px] text-center">
               0
             </span>
           </button>
@@ -1196,7 +1196,7 @@ export default function HostedJournalsPage() {
 
       <div className="flex flex-1 overflow-hidden">
         {/* Sidebar - Dark Blue */}
-        <aside className="w-56 bg-[#0f2b3d] text-white flex flex-col shrink-0">
+        <aside className="w-56 bg-primary text-white flex flex-col shrink-0">
           <div className="p-6 flex flex-col items-center">
             <div className="text-5xl font-serif mb-1 tracking-tight">
               <span className="font-light text-white/90">Iam</span>
@@ -1209,7 +1209,7 @@ export default function HostedJournalsPage() {
           <nav className="flex-1 pt-4">
             <Link
               href="/admin"
-              className="block px-4 py-3 text-sm font-semibold text-[#3498db] uppercase tracking-wide hover:bg-white/10 transition-colors"
+              className="block px-4 py-3 text-sm font-semibold text-primary uppercase tracking-wide hover:bg-white/10 transition-colors"
             >
               Administration
             </Link>
@@ -1220,7 +1220,7 @@ export default function HostedJournalsPage() {
         <main className="flex-1 flex flex-col overflow-hidden">
           {/* Gray Header Bar */}
           <div className="bg-[#e8e8e8] border-b border-gray-300 px-6 py-4 flex items-center justify-between shrink-0">
-            <h1 className="text-xl font-semibold text-[#0f2b3d]">
+            <h1 className="text-xl font-semibold text-primary">
               {currentView === "list"
                 ? "Journals"
                 : currentView === "create"
@@ -1247,7 +1247,7 @@ export default function HostedJournalsPage() {
             {currentView === "list" && (
               <div className="p-6">
                 <nav className="flex items-center gap-2 text-sm text-gray-600 mb-4">
-                  <Link href="/admin" className="text-[#0066cc] hover:underline">
+                  <Link href="/admin" className="text-primary hover:underline">
                     Administration
                   </Link>
                   <ChevronRight className="w-4 h-4 text-gray-400" />
@@ -1258,7 +1258,7 @@ export default function HostedJournalsPage() {
                 <div className="flex justify-end mb-4">
                   <button
                     onClick={handleCreate}
-                    className="text-[#0066cc] hover:text-[#004499] text-sm font-medium transition-colors hover:underline"
+                    className="text-primary hover:text-primary/80 text-sm font-medium transition-colors hover:underline"
                   >
                     Create Journal
                   </button>
@@ -1268,8 +1268,8 @@ export default function HostedJournalsPage() {
                 <div className="border border-gray-200 rounded bg-white">
                   {/* Table Header */}
                   <div className="grid grid-cols-2 bg-gray-100 border-b border-gray-200">
-                    <div className="px-4 py-3 text-sm font-medium text-[#0f2b3d]">Name</div>
-                    <div className="px-4 py-3 text-sm font-medium text-[#0f2b3d]">Path</div>
+                    <div className="px-4 py-3 text-sm font-medium text-primary">Name</div>
+                    <div className="px-4 py-3 text-sm font-medium text-primary">Path</div>
                   </div>
 
                   {/* Table Body */}
@@ -1288,11 +1288,11 @@ export default function HostedJournalsPage() {
                           >
                             <div className="px-4 py-3 flex items-center gap-2">
                               <ChevronRight
-                                className={`w-4 h-4 text-[#0f2b3d] transition-transform ${
+                                className={`w-4 h-4 text-primary transition-transform ${
                                   expandedJournalId === journal.id ? "rotate-90" : ""
                                 }`}
                               />
-                              <span className="text-sm text-[#0066cc] hover:underline">{journal.name}</span>
+                              <span className="text-sm text-primary hover:underline">{journal.name}</span>
                             </div>
                             <div className="px-4 py-3 text-sm text-gray-700">
                               {publishInfo.isPublished ? (
@@ -1300,7 +1300,7 @@ export default function HostedJournalsPage() {
                                   href={`${publishInfo.domain}/j/${journal.path || journal.acronym?.toLowerCase() || "journal"}`}
                                   target="_blank"
                                   rel="noopener noreferrer"
-                                  className="text-[#0066cc] hover:underline"
+                                  className="text-primary hover:underline"
                                   onClick={(e) => e.stopPropagation()}
                                 >
                                   {journal.path || journal.acronym?.toLowerCase() || "journal"}
@@ -1320,7 +1320,7 @@ export default function HostedJournalsPage() {
                                     e.stopPropagation()
                                     handleEdit(journal)
                                   }}
-                                  className="text-[#0066cc] hover:underline"
+                                  className="text-primary hover:underline"
                                 >
                                   Edit
                                 </button>
@@ -1329,14 +1329,14 @@ export default function HostedJournalsPage() {
                                     e.stopPropagation()
                                     handleOpenSettings(journal)
                                   }}
-                                  className="text-[#0066cc] hover:underline"
+                                  className="text-primary hover:underline"
                                 >
                                   Settings Wizard
                                 </button>
                                 <Link
                                   href={`/j/${journal.path || journal.id}`}
                                   onClick={(e) => e.stopPropagation()}
-                                  className="text-[#0066cc] hover:underline"
+                                  className="text-primary hover:underline"
                                 >
                                   View Journal
                                 </Link>
@@ -1365,11 +1365,11 @@ export default function HostedJournalsPage() {
             {(currentView === "create" || currentView === "edit") && (
               <div className="p-6 md:p-8 max-w-4xl">
                 <nav className="flex items-center gap-2 text-sm text-gray-600 mb-6">
-                  <Link href="/admin" className="text-[#0066cc] hover:underline">
+                  <Link href="/admin" className="text-primary hover:underline">
                     Administration
                   </Link>
                   <ChevronRight className="w-4 h-4 text-gray-400" />
-                  <button onClick={() => setCurrentView("list")} className="text-[#0066cc] hover:underline">
+                  <button onClick={() => setCurrentView("list")} className="text-primary hover:underline">
                     Hosted Journals
                   </button>
                   <ChevronRight className="w-4 h-4 text-gray-400" />
@@ -1394,7 +1394,7 @@ export default function HostedJournalsPage() {
                   {/* Step 1: Basic Information */}
                   <div className="p-6 border-b border-gray-200">
                     <div className="flex items-center gap-3 mb-6">
-                      <div className="w-8 h-8 rounded-full bg-[#1e5a5a] text-white flex items-center justify-center text-sm font-semibold">
+                      <div className="w-8 h-8 rounded-full bg-primary text-white flex items-center justify-center text-sm font-semibold">
                         1
                       </div>
                       <h2 className="text-lg font-semibold text-gray-900">Basic Information</h2>
@@ -1409,7 +1409,7 @@ export default function HostedJournalsPage() {
                           type="text"
                           value={formData.name}
                           onChange={(e) => setFormData({ ...formData, name: e.target.value })}
-                          className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#1e5a5a] focus:border-transparent transition-shadow"
+                          className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary focus:border-transparent transition-shadow"
                           placeholder="e.g., Journal of Computer Science"
                         />
                       </div>
@@ -1422,7 +1422,7 @@ export default function HostedJournalsPage() {
                           type="text"
                           value={formData.acronym}
                           onChange={(e) => setFormData({ ...formData, acronym: e.target.value })}
-                          className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#1e5a5a] focus:border-transparent transition-shadow"
+                          className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary focus:border-transparent transition-shadow"
                           placeholder="e.g., JCS"
                         />
                       </div>
@@ -1433,7 +1433,7 @@ export default function HostedJournalsPage() {
                           type="text"
                           value={formData.publisher}
                           onChange={(e) => setFormData({ ...formData, publisher: e.target.value })}
-                          className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#1e5a5a] focus:border-transparent transition-shadow"
+                          className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary focus:border-transparent transition-shadow"
                           placeholder="e.g., University Press"
                         />
                       </div>
@@ -1444,7 +1444,7 @@ export default function HostedJournalsPage() {
                           type="text"
                           value={formData.onlineIssn}
                           onChange={(e) => setFormData({ ...formData, onlineIssn: e.target.value })}
-                          className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#1e5a5a] focus:border-transparent transition-shadow"
+                          className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary focus:border-transparent transition-shadow"
                           placeholder="e.g., 2345-6789"
                         />
                       </div>
@@ -1455,7 +1455,7 @@ export default function HostedJournalsPage() {
                           type="text"
                           value={formData.printIssn}
                           onChange={(e) => setFormData({ ...formData, printIssn: e.target.value })}
-                          className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#1e5a5a] focus:border-transparent transition-shadow"
+                          className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary focus:border-transparent transition-shadow"
                           placeholder="e.g., 1234-5678"
                         />
                       </div>
@@ -1466,7 +1466,7 @@ export default function HostedJournalsPage() {
                           value={formData.journalSummary}
                           onChange={(e) => setFormData({ ...formData, journalSummary: e.target.value })}
                           rows={4}
-                          className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#1e5a5a] focus:border-transparent transition-shadow resize-none"
+                          className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary focus:border-transparent transition-shadow resize-none"
                           placeholder="Brief description of the journal's scope and focus..."
                         />
                       </div>
@@ -1476,7 +1476,7 @@ export default function HostedJournalsPage() {
                   {/* Step 2: Contact Details */}
                   <div className="p-6 border-b border-gray-200">
                     <div className="flex items-center gap-3 mb-6">
-                      <div className="w-8 h-8 rounded-full bg-[#1e5a5a] text-white flex items-center justify-center text-sm font-semibold">
+                      <div className="w-8 h-8 rounded-full bg-primary text-white flex items-center justify-center text-sm font-semibold">
                         2
                       </div>
                       <h2 className="text-lg font-semibold text-gray-900">Contact Details</h2>
@@ -1489,7 +1489,7 @@ export default function HostedJournalsPage() {
                           type="text"
                           value={formData.contactName}
                           onChange={(e) => setFormData({ ...formData, contactName: e.target.value })}
-                          className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#1e5a5a] focus:border-transparent transition-shadow"
+                          className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary focus:border-transparent transition-shadow"
                           placeholder="e.g., John Smith"
                         />
                       </div>
@@ -1502,7 +1502,7 @@ export default function HostedJournalsPage() {
                           type="email"
                           value={formData.contactEmail}
                           onChange={(e) => setFormData({ ...formData, contactEmail: e.target.value })}
-                          className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#1e5a5a] focus:border-transparent transition-shadow"
+                          className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary focus:border-transparent transition-shadow"
                           placeholder="e.g., editor@journal.com"
                         />
                       </div>
@@ -1512,7 +1512,7 @@ export default function HostedJournalsPage() {
                         <select
                           value={formData.country}
                           onChange={(e) => setFormData({ ...formData, country: e.target.value })}
-                          className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#1e5a5a] focus:border-transparent transition-shadow bg-white"
+                          className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary focus:border-transparent transition-shadow bg-white"
                         >
                           <option value="">Select a country</option>
                           {COUNTRIES.map((country) => (
@@ -1543,7 +1543,7 @@ export default function HostedJournalsPage() {
                               type="text"
                               value={formData.path}
                               onChange={(e) => setFormData({ ...formData, path: e.target.value })}
-                              className="flex-1 min-w-0 px-4 py-3 border border-gray-300 rounded-r-lg focus:ring-2 focus:ring-[#1e5a5a] focus:border-transparent transition-shadow"
+                              className="flex-1 min-w-0 px-4 py-3 border border-gray-300 rounded-r-lg focus:ring-2 focus:ring-primary focus:border-transparent transition-shadow"
                               placeholder="journal-path"
                             />
                           </div>
@@ -1568,7 +1568,7 @@ export default function HostedJournalsPage() {
                   {/* Step 3: Language Settings */}
                   <div className="p-6 border-b border-gray-200">
                     <div className="flex items-center gap-3 mb-6">
-                      <div className="w-8 h-8 rounded-full bg-[#1e5a5a] text-white flex items-center justify-center text-sm font-semibold">
+                      <div className="w-8 h-8 rounded-full bg-primary text-white flex items-center justify-center text-sm font-semibold">
                         3
                       </div>
                       <h2 className="text-lg font-semibold text-gray-900">Language Settings</h2>
@@ -1580,7 +1580,7 @@ export default function HostedJournalsPage() {
                         <select
                           value={formData.primaryLocale}
                           onChange={(e) => setFormData({ ...formData, primaryLocale: e.target.value })}
-                          className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#1e5a5a] focus:border-transparent transition-shadow bg-white"
+                          className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary focus:border-transparent transition-shadow bg-white"
                         >
                           {LANGUAGES.map((lang) => (
                             <option key={lang.code} value={lang.code}>
@@ -1598,7 +1598,7 @@ export default function HostedJournalsPage() {
                               key={lang.code}
                               className={`inline-flex items-center gap-2 px-3 py-2 rounded-lg border cursor-pointer transition-colors ${
                                 formData.languages.includes(lang.code)
-                                  ? "bg-[#1e5a5a] text-white border-[#1e5a5a]"
+                                  ? "bg-primary text-white border-primary"
                                   : "bg-white text-gray-700 border-gray-300 hover:border-gray-400"
                               }`}
                             >
@@ -1627,7 +1627,7 @@ export default function HostedJournalsPage() {
                     <button
                       onClick={handleSave}
                       disabled={!formData.name || !formData.acronym || !formData.contactEmail || !formData.path}
-                      className="px-6 py-2.5 bg-[#1e5a5a] text-white rounded-lg hover:bg-[#174a4a] transition-colors font-medium disabled:opacity-50 disabled:cursor-not-allowed"
+                      className="px-6 py-2.5 bg-primary text-white rounded-lg hover:bg-primary/90 transition-colors font-medium disabled:opacity-50 disabled:cursor-not-allowed"
                     >
                       {currentView === "create" ? "Create Journal" : "Save Changes"}
                     </button>
@@ -1641,11 +1641,11 @@ export default function HostedJournalsPage() {
               <div className="flex flex-col h-full">
                 <div className="px-6 pt-6">
                   <nav className="flex items-center gap-2 text-sm text-gray-600 mb-4">
-                    <Link href="/admin" className="text-[#0066cc] hover:underline">
+                  <Link href="/admin" className="text-primary hover:underline">
                       Administration
                     </Link>
                     <ChevronRight className="w-4 h-4 text-gray-400" />
-                    <button onClick={() => setCurrentView("list")} className="text-[#0066cc] hover:underline">
+                  <button onClick={() => setCurrentView("list")} className="text-primary hover:underline">
                       Hosted Journals
                     </button>
                     <ChevronRight className="w-4 h-4 text-gray-400" />
@@ -1662,7 +1662,7 @@ export default function HostedJournalsPage() {
                       key={tab.id}
                       onClick={() => setSettingsTab(tab.id)}
                       className={`px-4 py-2 rounded-lg font-medium transition-colors ${
-                        settingsTab === tab.id ? "bg-[#1e5a5a] text-white" : "text-gray-600 hover:bg-gray-100"
+                        settingsTab === tab.id ? "bg-primary text-white" : "text-gray-600 hover:bg-gray-100"
                       }`}
                     >
                       {tab.label}
@@ -1680,7 +1680,7 @@ export default function HostedJournalsPage() {
                           onClick={() => setJournalSettingsTab(tab.id)}
                           className={`px-3 py-1.5 rounded-md text-sm font-medium transition-colors ${
                             journalSettingsTab === tab.id
-                              ? "bg-white text-[#1e5a5a] shadow-sm"
+                              ? "bg-white text-primary shadow-sm"
                               : "text-gray-600 hover:text-gray-900"
                           }`}
                         >
@@ -1699,7 +1699,7 @@ export default function HostedJournalsPage() {
                                 type="text"
                                 value={formData.name}
                                 onChange={(e) => setFormData({ ...formData, name: e.target.value })}
-                                className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#1e5a5a] focus:border-transparent"
+                                className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary focus:border-transparent"
                               />
                             </div>
                             <div>
@@ -1708,7 +1708,7 @@ export default function HostedJournalsPage() {
                                 type="text"
                                 value={formData.acronym}
                                 onChange={(e) => setFormData({ ...formData, acronym: e.target.value })}
-                                className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#1e5a5a] focus:border-transparent"
+                                className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary focus:border-transparent"
                               />
                             </div>
                             <div>
@@ -1717,7 +1717,7 @@ export default function HostedJournalsPage() {
                                 type="text"
                                 value={formData.publisher}
                                 onChange={(e) => setFormData({ ...formData, publisher: e.target.value })}
-                                className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#1e5a5a] focus:border-transparent"
+                                className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary focus:border-transparent"
                               />
                             </div>
                             <div className="md:col-span-2">
@@ -1726,14 +1726,14 @@ export default function HostedJournalsPage() {
                                 value={formData.journalSummary}
                                 onChange={(e) => setFormData({ ...formData, journalSummary: e.target.value })}
                                 rows={4}
-                                className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#1e5a5a] focus:border-transparent resize-none"
+                                className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary focus:border-transparent resize-none"
                               />
                             </div>
                           </div>
                           <div className="flex justify-end">
                             <button
                               onClick={handleSave}
-                              className="px-6 py-2.5 bg-[#1e5a5a] text-white rounded-lg hover:bg-[#174a4a] transition-colors font-medium"
+                              className="px-6 py-2.5 bg-primary text-white rounded-lg hover:bg-primary/90 transition-colors font-medium"
                             >
                               Save Changes
                             </button>
@@ -1757,7 +1757,7 @@ export default function HostedJournalsPage() {
                                 type="text"
                                 value={formData.contactName}
                                 onChange={(e) => setFormData({ ...formData, contactName: e.target.value })}
-                                className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#1e5a5a] focus:border-transparent"
+                                className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary focus:border-transparent"
                               />
                             </div>
                             <div>
@@ -1768,7 +1768,7 @@ export default function HostedJournalsPage() {
                                 type="email"
                                 value={formData.contactEmail}
                                 onChange={(e) => setFormData({ ...formData, contactEmail: e.target.value })}
-                                className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#1e5a5a] focus:border-transparent"
+                                className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary focus:border-transparent"
                                 required
                               />
                             </div>
@@ -1776,7 +1776,7 @@ export default function HostedJournalsPage() {
                           <div className="flex justify-end">
                             <button
                               onClick={handleSave}
-                              className="px-6 py-2.5 bg-[#1e5a5a] text-white rounded-lg hover:bg-[#174a4a] transition-colors font-medium"
+                              className="px-6 py-2.5 bg-primary text-white rounded-lg hover:bg-primary/90 transition-colors font-medium"
                             >
                               Save Changes
                             </button>
@@ -1790,7 +1790,7 @@ export default function HostedJournalsPage() {
                             <p className="text-gray-600">Manage the sections for this journal</p>
                             <button
                               onClick={handleCreateSection}
-                              className="inline-flex items-center gap-2 px-4 py-2 bg-[#1e5a5a] text-white rounded-lg hover:bg-[#174a4a] transition-colors text-sm font-medium"
+                              className="inline-flex items-center gap-2 px-4 py-2 bg-primary text-white rounded-lg hover:bg-primary/90 transition-colors text-sm font-medium"
                             >
                               <svg
                                 xmlns="http://www.w3.org/2000/svg"
@@ -1896,7 +1896,7 @@ export default function HostedJournalsPage() {
                             <p className="text-gray-600">Organize articles into categories</p>
                             <button
                               onClick={handleCreateCategory}
-                              className="inline-flex items-center gap-2 px-4 py-2 bg-[#1e5a5a] text-white rounded-lg hover:bg-[#174a4a] transition-colors text-sm font-medium"
+                              className="inline-flex items-center gap-2 px-4 py-2 bg-primary text-white rounded-lg hover:bg-primary/90 transition-colors text-sm font-medium"
                             >
                               <svg
                                 xmlns="http://www.w3.org/2000/svg"
@@ -1973,7 +1973,7 @@ export default function HostedJournalsPage() {
                           onClick={() => setWorkflowTab(tab.id)}
                           className={`px-3 py-1.5 rounded-md text-sm font-medium transition-colors ${
                             workflowTab === tab.id
-                              ? "bg-white text-[#1e5a5a] shadow-sm"
+                              ? "bg-white text-primary shadow-sm"
                               : "text-gray-600 hover:text-gray-900"
                           }`}
                         >
@@ -1989,7 +1989,7 @@ export default function HostedJournalsPage() {
                             <p className="text-gray-600">Configure submission file components</p>
                             <button
                               onClick={handleCreateComponent}
-                              className="inline-flex items-center gap-2 px-4 py-2 bg-[#1e5a5a] text-white rounded-lg hover:bg-[#174a4a] transition-colors text-sm font-medium"
+                              className="inline-flex items-center gap-2 px-4 py-2 bg-primary text-white rounded-lg hover:bg-primary/90 transition-colors text-sm font-medium"
                             >
                               Add Component
                             </button>
@@ -2056,7 +2056,7 @@ export default function HostedJournalsPage() {
                                 onClick={() => setSubmissionSubTab(tab.id)}
                                 className={`px-3 py-1.5 rounded-md text-sm font-medium transition-colors ${
                                   submissionSubTab === tab.id
-                                    ? "bg-[#1e5a5a] text-white"
+                                    ? "bg-primary text-white"
                                     : "text-gray-600 hover:bg-gray-100"
                                 }`}
                               >
@@ -2084,7 +2084,7 @@ export default function HostedJournalsPage() {
                                 onChange={(e) =>
                                   setReviewSettings({ ...reviewSettings, reviewMode: e.target.value as any })
                                 }
-                                className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#1e5a5a] focus:border-transparent bg-white"
+                                className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary focus:border-transparent bg-white"
                               >
                                 <option value="anonymous">Anonymous Reviewer/Disclosed Author</option>
                                 <option value="doubleBlind">Double-Blind</option>
@@ -2104,7 +2104,7 @@ export default function HostedJournalsPage() {
                                     reviewDeadlineWeeks: Number.parseInt(e.target.value),
                                   })
                                 }
-                                className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#1e5a5a] focus:border-transparent"
+                                className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary focus:border-transparent"
                               />
                             </div>
                           </div>
@@ -2117,7 +2117,7 @@ export default function HostedJournalsPage() {
                             <p className="text-gray-600">Manage publisher library documents</p>
                             <button
                               onClick={handleCreateDocument}
-                              className="inline-flex items-center gap-2 px-4 py-2 bg-[#1e5a5a] text-white rounded-lg hover:bg-[#174a4a] transition-colors text-sm font-medium"
+                              className="inline-flex items-center gap-2 px-4 py-2 bg-primary text-white rounded-lg hover:bg-primary/90 transition-colors text-sm font-medium"
                             >
                               Add Document
                             </button>
@@ -2202,7 +2202,7 @@ export default function HostedJournalsPage() {
                                 })
                                 setShowEmailModal(true)
                               }}
-                              className="inline-flex items-center gap-2 px-4 py-2 bg-[#1e5a5a] text-white rounded-lg hover:bg-[#174a4a] transition-colors text-sm font-medium"
+                              className="inline-flex items-center gap-2 px-4 py-2 bg-primary text-white rounded-lg hover:bg-primary/90 transition-colors text-sm font-medium"
                             >
                               Add Email Template
                             </button>
@@ -2213,7 +2213,7 @@ export default function HostedJournalsPage() {
                               value={emailSearch}
                               onChange={(e) => setEmailSearch(e.target.value)}
                               placeholder="Search email templates..."
-                              className="flex-1 px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#1e5a5a] focus:border-transparent"
+                              className="flex-1 px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary focus:border-transparent"
                             />
                           </div>
                           <div className="border border-gray-200 rounded-lg overflow-hidden">
@@ -2287,7 +2287,7 @@ export default function HostedJournalsPage() {
                           <label className="block text-sm font-medium text-gray-700 mb-2">Theme Color</label>
                           <input
                             type="color"
-                            defaultValue="#1e5a5a"
+                            defaultValue="#1e3a8a"
                             className="w-full h-10 border border-gray-300 rounded-lg"
                           />
                         </div>
@@ -2304,12 +2304,12 @@ export default function HostedJournalsPage() {
                         <label className="block text-sm font-medium text-gray-700 mb-2">Footer Text</label>
                         <textarea
                           rows={3}
-                          className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#1e5a5a] focus:border-transparent"
+                          className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary focus:border-transparent"
                           placeholder="Enter footer text..."
                         />
                       </div>
                       <div className="flex justify-end">
-                        <button className="px-6 py-2.5 bg-[#1e5a5a] text-white rounded-lg hover:bg-[#174a4a] transition-colors font-medium">
+                        <button className="px-6 py-2.5 bg-primary text-white rounded-lg hover:bg-primary/90 transition-colors font-medium">
                           Save Settings
                         </button>
                       </div>
@@ -2328,7 +2328,7 @@ export default function HostedJournalsPage() {
                             type="checkbox"
                             id="enableDoi"
                             defaultChecked
-                            className="w-4 h-4 text-[#1e5a5a] rounded border-gray-300 focus:ring-[#1e5a5a]"
+                            className="w-4 h-4 text-primary rounded border-gray-300 focus:ring-primary"
                           />
                           <label htmlFor="enableDoi" className="text-sm text-gray-700">
                             Enable DOI Assignment
@@ -2339,7 +2339,7 @@ export default function HostedJournalsPage() {
                             type="checkbox"
                             id="enableOaiPmh"
                             defaultChecked
-                            className="w-4 h-4 text-[#1e5a5a] rounded border-gray-300 focus:ring-[#1e5a5a]"
+                            className="w-4 h-4 text-primary rounded border-gray-300 focus:ring-primary"
                           />
                           <label htmlFor="enableOaiPmh" className="text-sm text-gray-700">
                             Enable OAI-PMH Metadata Harvesting
@@ -2349,7 +2349,7 @@ export default function HostedJournalsPage() {
                           <input
                             type="checkbox"
                             id="enableCrossref"
-                            className="w-4 h-4 text-[#1e5a5a] rounded border-gray-300 focus:ring-[#1e5a5a]"
+                            className="w-4 h-4 text-primary rounded border-gray-300 focus:ring-primary"
                           />
                           <label htmlFor="enableCrossref" className="text-sm text-gray-700">
                             Enable Crossref Export
@@ -2360,7 +2360,7 @@ export default function HostedJournalsPage() {
                             type="checkbox"
                             id="enableRss"
                             defaultChecked
-                            className="w-4 h-4 text-[#1e5a5a] rounded border-gray-300 focus:ring-[#1e5a5a]"
+                            className="w-4 h-4 text-primary rounded border-gray-300 focus:ring-primary"
                           />
                           <label htmlFor="enableRss" className="text-sm text-gray-700">
                             Enable RSS Feeds
@@ -2368,7 +2368,7 @@ export default function HostedJournalsPage() {
                         </div>
                       </div>
                       <div className="flex justify-end">
-                        <button className="px-6 py-2.5 bg-[#1e5a5a] text-white rounded-lg hover:bg-[#174a4a] transition-colors font-medium">
+                        <button className="px-6 py-2.5 bg-primary text-white rounded-lg hover:bg-primary/90 transition-colors font-medium">
                           Save Settings
                         </button>
                       </div>
@@ -2397,7 +2397,7 @@ export default function HostedJournalsPage() {
                   type="text"
                   value={editingSection.title}
                   onChange={(e) => setEditingSection({ ...editingSection, title: e.target.value })}
-                  className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#1e5a5a] focus:border-transparent"
+                  className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary focus:border-transparent"
                 />
               </div>
               <div>
@@ -2406,7 +2406,7 @@ export default function HostedJournalsPage() {
                   type="text"
                   value={editingSection.abbreviation}
                   onChange={(e) => setEditingSection({ ...editingSection, abbreviation: e.target.value })}
-                  className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#1e5a5a] focus:border-transparent"
+                  className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary focus:border-transparent"
                 />
               </div>
               <div>
@@ -2415,7 +2415,7 @@ export default function HostedJournalsPage() {
                   value={editingSection.policy || ""}
                   onChange={(e) => setEditingSection({ ...editingSection, policy: e.target.value })}
                   rows={4}
-                  className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#1e5a5a] focus:border-transparent"
+                  className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary focus:border-transparent"
                 />
               </div>
               <div>
@@ -2424,7 +2424,7 @@ export default function HostedJournalsPage() {
                   type="number"
                   value={editingSection.wordCount || ""}
                   onChange={(e) => setEditingSection({ ...editingSection, wordCount: parseInt(e.target.value) || 0 })}
-                  className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#1e5a5a] focus:border-transparent"
+                  className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary focus:border-transparent"
                 />
               </div>
               <div className="flex items-center gap-2">
@@ -2433,7 +2433,7 @@ export default function HostedJournalsPage() {
                   id="isActive"
                   checked={editingSection.isActive}
                   onChange={(e) => setEditingSection({ ...editingSection, isActive: e.target.checked })}
-                  className="w-4 h-4 text-[#1e5a5a] rounded border-gray-300 focus:ring-[#1e5a5a]"
+                  className="w-4 h-4 text-primary rounded border-gray-300 focus:ring-primary"
                 />
                 <label htmlFor="isActive" className="text-sm text-gray-700">
                   Active
@@ -2452,7 +2452,7 @@ export default function HostedJournalsPage() {
               </button>
               <button
                 onClick={handleSaveSection}
-                className="px-4 py-2 bg-[#1e5a5a] text-white rounded-lg hover:bg-[#174a4a] font-medium"
+                className="px-4 py-2 bg-primary text-white rounded-lg hover:bg-primary/90 font-medium"
               >
                 Save
               </button>
@@ -2477,7 +2477,7 @@ export default function HostedJournalsPage() {
                   type="text"
                   value={editingCategory.name}
                   onChange={(e) => setEditingCategory({ ...editingCategory, name: e.target.value })}
-                  className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#1e5a5a] focus:border-transparent"
+                  className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary focus:border-transparent"
                 />
               </div>
               <div>
@@ -2486,7 +2486,7 @@ export default function HostedJournalsPage() {
                   type="text"
                   value={editingCategory.path}
                   onChange={(e) => setEditingCategory({ ...editingCategory, path: e.target.value })}
-                  className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#1e5a5a] focus:border-transparent"
+                  className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary focus:border-transparent"
                 />
               </div>
             </div>
@@ -2502,7 +2502,7 @@ export default function HostedJournalsPage() {
               </button>
               <button
                 onClick={handleSaveCategory}
-                className="px-4 py-2 bg-[#1e5a5a] text-white rounded-lg hover:bg-[#174a4a] font-medium"
+                className="px-4 py-2 bg-primary text-white rounded-lg hover:bg-primary/90 font-medium"
               >
                 Save
               </button>
@@ -2527,7 +2527,7 @@ export default function HostedJournalsPage() {
                   type="text"
                   value={editingComponent.name}
                   onChange={(e) => setEditingComponent({ ...editingComponent, name: e.target.value })}
-                  className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#1e5a5a] focus:border-transparent"
+                  className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary focus:border-transparent"
                 />
               </div>
               <div>
@@ -2535,7 +2535,7 @@ export default function HostedJournalsPage() {
                 <select
                   value={editingComponent.fileType}
                   onChange={(e) => setEditingComponent({ ...editingComponent, fileType: e.target.value as any })}
-                  className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#1e5a5a] focus:border-transparent bg-white"
+                  className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary focus:border-transparent bg-white"
                 >
                   <option value="document">Document</option>
                   <option value="artwork">Artwork</option>
@@ -2548,7 +2548,7 @@ export default function HostedJournalsPage() {
                   id="isRequired"
                   checked={editingComponent.isRequired}
                   onChange={(e) => setEditingComponent({ ...editingComponent, isRequired: e.target.checked })}
-                  className="w-4 h-4 text-[#1e5a5a] rounded border-gray-300 focus:ring-[#1e5a5a]"
+                  className="w-4 h-4 text-primary rounded border-gray-300 focus:ring-primary"
                 />
                 <label htmlFor="isRequired" className="text-sm text-gray-700">
                   Required
@@ -2567,7 +2567,7 @@ export default function HostedJournalsPage() {
               </button>
               <button
                 onClick={handleSaveComponent}
-                className="px-4 py-2 bg-[#1e5a5a] text-white rounded-lg hover:bg-[#174a4a] font-medium"
+                className="px-4 py-2 bg-primary text-white rounded-lg hover:bg-primary/90 font-medium"
               >
                 Save
               </button>
@@ -2592,7 +2592,7 @@ export default function HostedJournalsPage() {
                   type="text"
                   value={editingReviewForm.title}
                   onChange={(e) => setEditingReviewForm({ ...editingReviewForm, title: e.target.value })}
-                  className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#1e5a5a] focus:border-transparent"
+                  className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary focus:border-transparent"
                 />
               </div>
               <div>
@@ -2601,7 +2601,7 @@ export default function HostedJournalsPage() {
                   value={editingReviewForm.description || ""}
                   onChange={(e) => setEditingReviewForm({ ...editingReviewForm, description: e.target.value })}
                   rows={4}
-                  className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#1e5a5a] focus:border-transparent"
+                  className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary focus:border-transparent"
                 />
               </div>
               <div className="flex items-center gap-2">
@@ -2610,7 +2610,7 @@ export default function HostedJournalsPage() {
                   id="reviewFormActive"
                   checked={editingReviewForm.isActive}
                   onChange={(e) => setEditingReviewForm({ ...editingReviewForm, isActive: e.target.checked })}
-                  className="w-4 h-4 text-[#1e5a5a] rounded border-gray-300 focus:ring-[#1e5a5a]"
+                  className="w-4 h-4 text-primary rounded border-gray-300 focus:ring-primary"
                 />
                 <label htmlFor="reviewFormActive" className="text-sm text-gray-700">
                   Active
@@ -2629,7 +2629,7 @@ export default function HostedJournalsPage() {
               </button>
               <button
                 onClick={handleSaveReviewForm}
-                className="px-4 py-2 bg-[#1e5a5a] text-white rounded-lg hover:bg-[#174a4a] font-medium"
+                className="px-4 py-2 bg-primary text-white rounded-lg hover:bg-primary/90 font-medium"
               >
                 Save
               </button>
@@ -2654,7 +2654,7 @@ export default function HostedJournalsPage() {
                   type="text"
                   value={editingDocument.name}
                   onChange={(e) => setEditingDocument({ ...editingDocument, name: e.target.value })}
-                  className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#1e5a5a] focus:border-transparent"
+                  className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary focus:border-transparent"
                 />
               </div>
               <div>
@@ -2662,7 +2662,7 @@ export default function HostedJournalsPage() {
                 <select
                   value={editingDocument.type}
                   onChange={(e) => setEditingDocument({ ...editingDocument, type: e.target.value as any })}
-                  className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#1e5a5a] focus:border-transparent bg-white"
+                  className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary focus:border-transparent bg-white"
                 >
                   <option value="marketing">Marketing</option>
                   <option value="permission">Permission</option>
@@ -2676,7 +2676,7 @@ export default function HostedJournalsPage() {
                   id="documentPublic"
                   checked={editingDocument.isPublic}
                   onChange={(e) => setEditingDocument({ ...editingDocument, isPublic: e.target.checked })}
-                  className="w-4 h-4 text-[#1e5a5a] rounded border-gray-300 focus:ring-[#1e5a5a]"
+                  className="w-4 h-4 text-primary rounded border-gray-300 focus:ring-primary"
                 />
                 <label htmlFor="documentPublic" className="text-sm text-gray-700">
                   Public (visible to all users)
@@ -2695,7 +2695,7 @@ export default function HostedJournalsPage() {
               </button>
               <button
                 onClick={handleSaveDocument}
-                className="px-4 py-2 bg-[#1e5a5a] text-white rounded-lg hover:bg-[#174a4a] font-medium"
+                className="px-4 py-2 bg-primary text-white rounded-lg hover:bg-primary/90 font-medium"
               >
                 Save
               </button>
@@ -2720,7 +2720,7 @@ export default function HostedJournalsPage() {
                   type="text"
                   value={editingEmail.name}
                   onChange={(e) => setEditingEmail({ ...editingEmail, name: e.target.value })}
-                  className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#1e5a5a] focus:border-transparent"
+                  className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary focus:border-transparent"
                   placeholder="e.g., SUBMISSION_ACK"
                 />
               </div>
@@ -2730,7 +2730,7 @@ export default function HostedJournalsPage() {
                   type="text"
                   value={editingEmail.subject}
                   onChange={(e) => setEditingEmail({ ...editingEmail, subject: e.target.value })}
-                  className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#1e5a5a] focus:border-transparent"
+                  className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary focus:border-transparent"
                 />
               </div>
               <div>
@@ -2739,7 +2739,7 @@ export default function HostedJournalsPage() {
                   type="text"
                   value={editingEmail.description || ""}
                   onChange={(e) => setEditingEmail({ ...editingEmail, description: e.target.value })}
-                  className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#1e5a5a] focus:border-transparent"
+                  className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary focus:border-transparent"
                 />
               </div>
               <div>
@@ -2748,7 +2748,7 @@ export default function HostedJournalsPage() {
                   value={editingEmail.body}
                   onChange={(e) => setEditingEmail({ ...editingEmail, body: e.target.value })}
                   rows={8}
-                  className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#1e5a5a] focus:border-transparent resize-none"
+                  className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary focus:border-transparent resize-none"
                 />
               </div>
               <div className="flex items-center gap-2">
@@ -2757,7 +2757,7 @@ export default function HostedJournalsPage() {
                   id="emailEnabled"
                   checked={editingEmail.isEnabled}
                   onChange={(e) => setEditingEmail({ ...editingEmail, isEnabled: e.target.checked })}
-                  className="w-4 h-4 text-[#1e5a5a] rounded border-gray-300 focus:ring-[#1e5a5a]"
+                  className="w-4 h-4 text-primary rounded border-gray-300 focus:ring-primary"
                 />
                 <label htmlFor="emailEnabled" className="text-sm text-gray-700">
                   Enabled
@@ -2776,7 +2776,7 @@ export default function HostedJournalsPage() {
               </button>
               <button
                 onClick={handleSaveEmail}
-                className="px-4 py-2 bg-[#1e5a5a] text-white rounded-lg hover:bg-[#174a4a] font-medium"
+                className="px-4 py-2 bg-primary text-white rounded-lg hover:bg-primary/90 font-medium"
               >
                 Save
               </button>

@@ -1,5 +1,6 @@
 import type { Metadata } from "next"
 import { EditorDashboard } from "@/components/editor/editor-dashboard"
+import { DashboardLayout } from "@/components/layout/dashboard-layout"
 
 export const metadata: Metadata = {
   title: "Editorial Dashboard | OJS",
@@ -7,5 +8,9 @@ export const metadata: Metadata = {
 }
 
 export default function EditorPage() {
-  return <EditorDashboard />
+  return (
+    <DashboardLayout title="Editor Dashboard" subtitle="Manage submissions and coordinate peer review">
+      <EditorDashboard />
+    </DashboardLayout>
+  )
 }

@@ -8,25 +8,24 @@ import { WorkflowOverview } from "@/components/dashboard/workflow-overview"
 import { SubmissionCard } from "@/components/submissions/submission-card"
 import { Card, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
-import { useSubmissions } from "@/lib/hooks/use-submissions"
+import { useSubmissionsAPI } from "@/lib/hooks/use-submissions-api"
 import { useAuth } from "@/lib/hooks/use-auth"
-import { useReviews } from "@/lib/hooks/use-reviews"
+import { useReviewsAPI } from "@/lib/hooks/use-reviews-api"
 import { ArrowRight, FileText, ClipboardCheck } from "lucide-react"
 import Link from "next/link"
-import { initializeStorage } from "@/lib/storage"
 
 export default function DashboardPage() {
   const { user, isEditor, isReviewer, isAuthor, isLoading: authLoading } = useAuth()
-  const { submissions, statistics, isLoading: subLoading } = useSubmissions()
-  const { assignments } = useReviews(user?.id)
+  // Rely on API to filter by role (Editors see all, Authors see own)
+  const { submissions, statistics, isLoading: subLoading } = useSubmissionsAPI()
+  const { assignments, isLoading: reviewsLoading } = useReviewsAPI(user?.id)
   const [mounted, setMounted] = useState(false)
 
   useEffect(() => {
-    initializeStorage()
     setMounted(true)
   }, [])
 
-  if (!mounted || authLoading || subLoading) {
+  if (!mounted || authLoading || subLoading || reviewsLoading) {
     return (
       <DashboardLayout title="Dashboard" subtitle="Loading...">
         <div className="flex items-center justify-center py-12">
@@ -36,10 +35,19 @@ export default function DashboardPage() {
     )
   }
 
+  // Debug logging
+  console.log('[Dashboard] Current state:', {
+    submissionsCount: submissions.length,
+    statisticsTotal: statistics.total,
+    isEditor,
+    userId: user?.id,
+    sampleSubmission: submissions[0]
+  })
+
   const pendingReviews = assignments.filter((a) => a.status === "pending" || a.status === "accepted")
   const recentSubmissions = submissions
     .sort((a, b) => new Date(b.dateSubmitted || 0).getTime() - new Date(a.dateSubmitted || 0).getTime())
-    .slice(0, 3)
+    .slice(0, 12) // Increased from 3 to 12
 
   return (
     <DashboardLayout title="Dashboard" subtitle={`Welcome back, ${user?.firstName || "User"}`}>
@@ -60,11 +68,26 @@ export default function DashboardPage() {
                 </Link>
               </Button>
             </div>
-            <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-1 xl:grid-cols-2">
-              {recentSubmissions.map((submission) => (
-                <SubmissionCard key={submission.id} submission={submission} />
-              ))}
-            </div>
+
+            {/* Show empty state or submissions */}
+            {recentSubmissions.length === 0 ? (
+              <div className="rounded-lg border-2 border-dashed border-gray-300 p-12 text-center">
+                <FileText className="mx-auto h-12 w-12 text-gray-400" />
+                <h3 className="mt-2 text-sm font-medium text-gray-900">No submissions yet</h3>
+                <p className="mt-1 text-sm text-gray-500">
+                  {isEditor ? "Waiting for author submissions" : "Create your first submission to get started"}
+                </p>
+                <div className="mt-4 text-xs text-gray-400">
+                  Debug: Check browser console for API details
+                </div>
+              </div>
+            ) : (
+              <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-1 xl:grid-cols-2">
+                {recentSubmissions.map((submission) => (
+                  <SubmissionCard key={submission.id} submission={submission} />
+                ))}
+              </div>
+            )}
           </div>
 
           {/* Sidebar */}

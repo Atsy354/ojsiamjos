@@ -3,18 +3,17 @@
  * /api/admin/emails
  */
 
-import { createRouteHandlerClient } from '@/lib/supabase/server';
+import { createClient } from '@/lib/supabase/server';
 import { NextResponse } from 'next/server';
-import { EMAIL_TEMPLATE_KEYS } from '@/lib/email/types';
 
 export const dynamic = 'force-dynamic';
 
 export async function GET(request: Request) {
     try {
-        const supabase = await createRouteHandlerClient();
-        const { data: session } = await supabase.auth.getSession();
+        const supabase = await createClient();
+        const { data: { user: authUser }, error: authUserError } = await supabase.auth.getUser();
 
-        if (!session.session) {
+        if (authUserError || !authUser) {
             return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
         }
 
@@ -92,9 +91,9 @@ export async function GET(request: Request) {
 
 export async function POST(request: Request) {
     try {
-        const supabase = await createRouteHandlerClient();
-        const { data: session } = await supabase.auth.getSession();
-        if (!session.session) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+        const supabase = await createClient();
+        const { data: { user: authUser }, error: authUserError } = await supabase.auth.getUser();
+        if (authUserError || !authUser) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
 
         const body = await request.json();
         const { emailKey, subject, body: emailBody, enabled } = body;
@@ -147,9 +146,9 @@ export async function POST(request: Request) {
 export async function DELETE(request: Request) {
     // Reset Template (Delete custom entry)
     try {
-        const supabase = await createRouteHandlerClient();
-        const { data: session } = await supabase.auth.getSession();
-        if (!session.session) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+        const supabase = await createClient();
+        const { data: { user: authUser }, error: authUserError } = await supabase.auth.getUser();
+        if (authUserError || !authUser) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
 
         const { searchParams } = new URL(request.url);
         const emailKey = searchParams.get('key');

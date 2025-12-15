@@ -1,0 +1,95 @@
+/**
+ * Global CSS Fixes for UI Issues
+ * Prevents layout shifts and z-index problems
+ */
+
+/* Fix for Select/Dropdown z-index issues */
+[data-radix-popper-content-wrapper] {
+  z-index: 9999 !important;
+}
+
+/* Ensure Select content is fully visible */
+[data-radix-select-content] {
+  z-index: 9999 !important;
+  max-height: 300px !important;
+  overflow: visible !important;
+}
+
+[data-radix-select-viewport] {
+  max-height: 300px !important;
+  overflow-y: auto !important;
+}
+
+[role="dialog"] {
+  z-index: 200 !important;
+}
+
+/* Prevent layout shift when dropdown opens */
+.prevent-shift {
+  position: relative;
+  z-index: 1;
+}
+
+/* Ensure Select content appears above everything */
+[data-radix-select-content] {
+  z-index: 100 !important;
+}
+
+[data-radix-select-viewport] {
+  z-index: 100 !important;
+}
+
+/* Fix for Popover overlay */
+[data-radix-popover-content] {
+  z-index: 150 !important;
+}
+
+/* Prevent Card from blocking dropdown */
+.card {
+  position: relative;
+  z-index: auto !important;
+}
+
+/* Ensure dropdowns don't get cut off */
+body {
+  overflow-x: hidden;
+  overflow-y: auto;
+}
+
+/* Fix ScrollArea in Select */
+[data-radix-scroll-area-viewport] {
+  max-height: 300px;
+}
+
+/* Smooth transitions for better UX */
+[data-radix-select-content],
+[data-radix-popover-content],
+[data-radix-dialog-content] {
+  transition: opacity 150ms ease-in-out, transform 150ms ease-in-out;
+}
+
+/* Prevent button/input from being unclickable */
+button:not(:disabled), 
+input:not(:disabled), 
+select:not(:disabled) {
+  pointer-events: auto !important;
+  cursor: pointer;
+}
+
+/* Fix for overlapping content */
+.relative {
+  isolation: isolate;
+}
+
+/* Ensure proper stacking context */
+.z-50 {
+  z-index: 50 !important;
+}
+
+.z-100 {
+  z-index: 100 !important;
+}
+
+.z-200 {
+  z-index: 200 !important;
+}

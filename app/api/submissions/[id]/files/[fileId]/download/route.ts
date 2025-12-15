@@ -1,69 +1,95 @@
 // app/api/submissions/[id]/files/[fileId]/download/route.ts
 import { NextRequest, NextResponse } from "next/server"
-import { authMiddleware, AuthRequest } from "@/lib/auth/middleware"
-import { prisma } from "@/lib/prisma"
+import { createClient } from "@/lib/supabase/server"
+import { requireAuth } from "@/lib/middleware/auth"
+import { logger } from "@/lib/utils/logger"
 import { getSignedUrl } from "@/lib/storage/supabase-storage"
 
-export const GET = authMiddleware(async (
-  req: AuthRequest,
+export async function GET(
+  request: NextRequest,
   { params }: { params: Promise<{ id: string; fileId: string }> }
-) => {
+) {
+  const startTime = Date.now()
+
   try {
-    const { id: submissionId, fileId } = await params
-
-    // Get file record
-    const file = await prisma.submissionFile.findUnique({
-      where: { id: fileId },
-      include: {
-        submission: {
-          select: { submitterId: true, journalId: true },
-        },
-      },
-    })
-
-    if (!file || file.submissionId !== submissionId) {
-      return NextResponse.json(
-        { error: "File not found" },
-        { status: 404 }
-      )
+    const { id, fileId } = await params
+    const submissionIdNum = parseInt(id, 10)
+    if (Number.isNaN(submissionIdNum)) {
+      return NextResponse.json({ error: "Invalid submission id" }, { status: 400 })
     }
 
-    // Verify access
-    const isSubmitter = file.submission.submitterId === req.user?.userId
-    const isEditor = req.user?.roles.includes("editor")
-    const isReviewer = req.user?.roles.includes("reviewer")
-
-    // Check if reviewer has access to review files
-    let hasReviewAccess = false
-    if (isReviewer && file.fileStage === "review") {
-      const reviewAssignment = await prisma.reviewAssignment.findFirst({
-        where: {
-          submissionId: submissionId,
-          reviewerId: req.user!.userId,
-          status: { in: ["accepted", "completed"] },
-        },
-      })
-      hasReviewAccess = !!reviewAssignment
+    const { authorized, user, error: authError } = await requireAuth(request)
+    if (!authorized) {
+      logger.apiError("/api/submissions/[id]/files/[fileId]/download", "GET", authError)
+      return NextResponse.json({ error: authError || "Unauthorized" }, { status: 401 })
     }
 
-    if (!isSubmitter && !isEditor && !hasReviewAccess) {
-      return NextResponse.json(
-        { error: "Unauthorized" },
-        { status: 403 }
-      )
+    logger.apiRequest("/api/submissions/[id]/files/[fileId]/download", "GET", user?.id)
+
+    const supabase = await createClient()
+
+    // Load file - use file_id as the primary key column
+    const { data: file, error: fileError } = await supabase
+      .from("submission_files")
+      .select("file_id, submission_id, file_path, file_stage")
+      .eq("file_id", fileId)
+      .maybeSingle()
+
+    if (fileError) {
+      logger.apiError("/api/submissions/[id]/files/[fileId]/download", "GET", fileError, user?.id)
+      return NextResponse.json({ error: fileError.message }, { status: 500 })
     }
 
-    // Generate signed URL (valid for 1 hour)
-    const signedUrl = await getSignedUrl(file.filePath, 3600)
+    if (!file || (file as any).submission_id !== submissionIdNum) {
+      return NextResponse.json({ error: "File not found" }, { status: 404 })
+    }
 
-    return NextResponse.json({ url: signedUrl })
+    // Load submission for permission check
+    const { data: submission, error: submissionError } = await supabase
+      .from("submissions")
+      .select("id, submitter_id")
+      .eq("id", submissionIdNum)
+      .maybeSingle()
+
+    if (submissionError) {
+      logger.apiError("/api/submissions/[id]/files/[fileId]/download", "GET", submissionError, user?.id)
+      return NextResponse.json({ error: submissionError.message }, { status: 500 })
+    }
+
+    if (!submission) {
+      return NextResponse.json({ error: "Submission not found" }, { status: 404 })
+    }
+
+    const roles = user?.roles || []
+    const isEditorOrAdmin = roles.includes("admin") || roles.includes("editor") || roles.includes("manager")
+    const isSubmitter = submission.submitter_id === user?.id
+
+    let isAssignedReviewer = false
+    if (!isEditorOrAdmin && !isSubmitter) {
+      const { data: ra } = await supabase
+        .from("review_assignments")
+        .select("id")
+        .eq("submission_id", submissionIdNum)
+        .eq("reviewer_id", user?.id)
+        .eq("cancelled", false)
+        .maybeSingle()
+      isAssignedReviewer = !!ra
+    }
+
+    if (!isEditorOrAdmin && !isSubmitter && !isAssignedReviewer) {
+      return NextResponse.json({ error: "Forbidden" }, { status: 403 })
+    }
+
+    const signedUrl = await getSignedUrl((file as any).file_path, 3600)
+
+    const duration = Date.now() - startTime
+    logger.apiResponse("/api/submissions/[id]/files/[fileId]/download", "GET", 200, duration, user?.id)
+
+    return NextResponse.redirect(signedUrl)
   } catch (error: any) {
-    console.error("Get signed URL error:", error)
-    return NextResponse.json(
-      { error: error.message || "Failed to generate download URL" },
-      { status: 500 }
-    )
+    logger.apiError("/api/submissions/[id]/files/[fileId]/download", "GET", error)
+    return NextResponse.json({ error: error.message || "Internal server error" }, { status: 500 })
   }
-})
+}
 
 

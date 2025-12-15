@@ -120,7 +120,7 @@ export function ProofreadingPanel({ submission, isEditor, onStatusChange }: Proo
     const newFile: SubmissionFile = {
       id: `file-${Date.now()}`,
       submissionId: submission.id,
-      fileName: `proof_${submission.id.slice(-6)}.pdf`,
+      fileName: `proof_${String(submission.id).slice(-6)}.pdf`,
       fileType: "application/pdf",
       fileSize: Math.floor(Math.random() * 500000) + 100000,
       fileStage: "proof",

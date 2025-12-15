@@ -13,17 +13,17 @@ export interface UploadResult {
 
 /**
  * Upload file to Supabase Storage
+ * IMPROVED: Preserves original filename for better UX
  */
 export async function uploadFileToSupabase(
   file: File,
   submissionId: string,
   fileStage: string
 ): Promise<UploadResult> {
-  // Generate unique filename
+  // Preserve original filename with timestamp for uniqueness
   const timestamp = Date.now()
-  const randomStr = Math.random().toString(36).substring(2, 15)
-  const ext = file.name.split(".").pop()
-  const fileName = `${timestamp}-${randomStr}.${ext}`
+  const sanitizedName = file.name.replace(/[^a-zA-Z0-9._-]/g, '_') // Remove special chars
+  const fileName = `${timestamp}_${sanitizedName}` // Original name visible!
   const filePath = `${submissionId}/${fileStage}/${fileName}`
 
   // Convert File to ArrayBuffer
@@ -42,10 +42,9 @@ export async function uploadFileToSupabase(
     throw new Error(`Upload failed: ${error.message}`)
   }
 
-  // Since bucket is private, we don't use public URL
-  // Signed URL will be generated on-demand via API
+  // Return original filename for display
   return {
-    fileName: file.name,
+    fileName: file.name, // Keep original for UI display
     filePath: data.path,
     fileUrl: "", // Will be generated via signed URL when needed
     fileSize: file.size,
@@ -80,5 +79,3 @@ export async function deleteFileFromSupabase(filePath: string): Promise<void> {
     throw new Error(`Delete failed: ${error.message}`)
   }
 }
-
-

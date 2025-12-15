@@ -1,4 +1,4 @@
-import { createRouteHandlerClient } from '@/lib/supabase/server';
+import { createClient } from '@/lib/supabase/server';
 import { NextResponse } from 'next/server';
 import { EventLogService } from '@/lib/services/event-log.service';
 
@@ -12,7 +12,7 @@ export async function GET(request: Request) {
         return NextResponse.json({ error: 'Submission ID required' }, { status: 400 });
     }
 
-    const supabase = await createRouteHandlerClient();
+    const supabase = await createClient();
     const logService = new EventLogService(supabase);
 
     const logs = await logService.getSubmissionLogs(parseInt(submissionId));

@@ -17,10 +17,8 @@ import {
 } from "@/components/ui/dialog"
 import { Separator } from "@/components/ui/separator"
 import { FileText, Download, Upload, MessageSquare, CheckCircle2, Clock, Send, Eye, AlertCircle } from "lucide-react"
-import { copyeditService } from "@/lib/services/copyedit-service"
-import { userService } from "@/lib/services/user-service"
-import type { CopyeditingAssignment, SubmissionFile } from "@/lib/types"
-import { generateId } from "@/lib/services/base"
+import { apiGet, apiPost, apiUploadFile } from "@/lib/api/client"
+import type { SubmissionFile } from "@/lib/types"
 
 interface AuthorCopyeditingPanelProps {
   submissionId: string
@@ -28,51 +26,90 @@ interface AuthorCopyeditingPanelProps {
 }
 
 export function AuthorCopyeditingPanel({ submissionId, onComplete }: AuthorCopyeditingPanelProps) {
-  const [assignment, setAssignment] = useState<CopyeditingAssignment | null>(null)
+  const [files, setFiles] = useState<any[]>([])
+  const [copyeditFiles, setCopyeditFiles] = useState<any[]>([])
   const [authorComments, setAuthorComments] = useState("")
-  const [uploadedFiles, setUploadedFiles] = useState<SubmissionFile[]>([])
+  const [uploadedFiles, setUploadedFiles] = useState<File[]>([])
   const [isSubmitDialogOpen, setIsSubmitDialogOpen] = useState(false)
+  const [isLoading, setIsLoading] = useState(true)
+  const [isUploading, setIsUploading] = useState(false)
+  const [isSubmitting, setIsSubmitting] = useState(false)
 
   useEffect(() => {
-    loadData()
+    void loadData()
   }, [submissionId])
 
-  const loadData = () => {
-    const assignments = copyeditService.getBySubmissionId(submissionId)
-    const authorReviewAssignment = assignments.find((a) => a.status === "author_review")
-    if (authorReviewAssignment) {
-      setAssignment(authorReviewAssignment)
-      setAuthorComments(authorReviewAssignment.authorComments || "")
+  const loadData = async () => {
+    setIsLoading(true)
+    try {
+      const response: any = await apiGet(`/api/submissions/${submissionId}/files?submissionId=${submissionId}`)
+      const list = Array.isArray(response) ? response : (response?.data ?? [])
+      const safe = Array.isArray(list) ? list : []
+      setFiles(safe)
+
+      const isCopyeditStage = (f: any) => {
+        const s = f?.stage ?? f?.fileStage ?? f?.file_stage
+        if (!s) return false
+        if (typeof s === 'string') return s.toLowerCase().includes('copyedit')
+        // legacy numeric best-effort: 4/10 used by other parts of app
+        if (typeof s === 'number') return s === 4 || s === 10
+        return false
+      }
+
+      setCopyeditFiles(safe.filter(isCopyeditStage))
+    } catch (e) {
+      console.error('Failed to load copyedit files:', e)
+      setFiles([])
+      setCopyeditFiles([])
+    } finally {
+      setIsLoading(false)
     }
   }
 
   const handleFileUpload = () => {
-    const newFile: SubmissionFile = {
-      id: generateId(),
-      submissionId,
-      fileName: `Author_Reviewed_Copyedit.docx`,
-      fileType: "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
-      fileSize: Math.floor(Math.random() * 300000) + 100000,
-      fileStage: "copyedit",
-      uploadedAt: new Date().toISOString(),
-      uploadedBy: userService.getCurrentUser()?.id || "",
+    const input = document.createElement('input')
+    input.type = 'file'
+    input.multiple = true
+    input.onchange = () => {
+      const selected = input.files ? Array.from(input.files) : []
+      if (selected.length === 0) return
+      setUploadedFiles((prev) => [...prev, ...selected])
     }
-    setUploadedFiles([...uploadedFiles, newFile])
+    input.click()
   }
 
   const handleSubmitReview = () => {
-    if (!assignment) return
+    void (async () => {
+      setIsSubmitting(true)
+      try {
+        // Optional: upload author-reviewed files
+        if (uploadedFiles.length > 0) {
+          setIsUploading(true)
+          for (const f of uploadedFiles) {
+            await apiUploadFile(`/api/submissions/${submissionId}/files`, f, {
+              fileStage: 'copyedit_author_review',
+              submissionId: String(submissionId),
+            })
+          }
+          setUploadedFiles([])
+        }
 
-    // Update assignment with author comments and mark as completed
-    copyeditService.update(assignment.id, {
-      authorComments,
-      status: "completed",
-      files: [...assignment.files, ...uploadedFiles],
-    })
+        // Record author approval + comments
+        await apiPost(`/api/copyediting/${submissionId}/approve`, {
+          approved: true,
+          comments: authorComments,
+        })
 
-    setIsSubmitDialogOpen(false)
-    loadData()
-    onComplete?.()
+        setIsSubmitDialogOpen(false)
+        await loadData()
+        onComplete?.()
+      } catch (e) {
+        console.error('Failed to submit copyediting review:', e)
+      } finally {
+        setIsUploading(false)
+        setIsSubmitting(false)
+      }
+    })()
   }
 
   const formatDate = (dateString: string) => {
@@ -89,7 +126,18 @@ export function AuthorCopyeditingPanel({ submissionId, onComplete }: AuthorCopye
     return (bytes / (1024 * 1024)).toFixed(1) + " MB"
   }
 
-  if (!assignment) {
+  if (isLoading) {
+    return (
+      <Card>
+        <CardContent className="py-8 text-center">
+          <Clock className="h-12 w-12 mx-auto text-muted-foreground mb-4" />
+          <p className="text-muted-foreground">Loading copyediting tasks...</p>
+        </CardContent>
+      </Card>
+    )
+  }
+
+  if (copyeditFiles.length === 0) {
     return (
       <Card>
         <CardContent className="py-8 text-center">
@@ -123,52 +171,47 @@ export function AuthorCopyeditingPanel({ submissionId, onComplete }: AuthorCopye
           <AlertDescription>
             The copyeditor has completed their review. Please review the copyedited manuscript, track any changes, and
             respond to any author queries.
-            {assignment.dateDue && (
-              <span className="block mt-1 font-medium">Due: {formatDate(assignment.dateDue)}</span>
-            )}
           </AlertDescription>
         </Alert>
-
-        {assignment.instructions && (
-          <div className="bg-muted/30 p-4 rounded-lg">
-            <Label className="text-sm font-medium mb-2 block">Instructions from Copyeditor</Label>
-            <p className="text-sm whitespace-pre-wrap">{assignment.instructions}</p>
-          </div>
-        )}
-
-        {assignment.copyeditorComments && (
-          <div className="border rounded-lg p-4">
-            <div className="flex items-center gap-2 mb-2">
-              <MessageSquare className="h-4 w-4 text-muted-foreground" />
-              <span className="font-medium">Copyeditor's Comments</span>
-            </div>
-            <p className="text-sm whitespace-pre-wrap">{assignment.copyeditorComments}</p>
-          </div>
-        )}
 
         <Separator />
 
         <div>
           <Label className="text-sm font-medium mb-3 block">Copyedited Files</Label>
           <div className="space-y-2">
-            {assignment.files.map((file) => (
-              <div key={file.id} className="flex items-center justify-between p-3 border rounded-lg">
+            {copyeditFiles.map((file: any, idx: number) => (
+              <div key={file?.fileId ?? file?.file_id ?? file?.id ?? idx} className="flex items-center justify-between p-3 border rounded-lg">
                 <div className="flex items-center gap-3">
                   <FileText className="h-5 w-5 text-muted-foreground" />
                   <div>
-                    <p className="font-medium text-sm">{file.fileName}</p>
+                    <p className="font-medium text-sm">
+                      {file?.originalFileName || file?.original_file_name || file?.file_name || file?.fileName || "File"}
+                    </p>
                     <p className="text-xs text-muted-foreground">
-                      {formatFileSize(file.fileSize)} • {formatDate(file.uploadedAt)}
+                      {formatFileSize(file?.fileSize ?? file?.file_size ?? 0)} • {formatDate(file?.uploadedAt ?? file?.date_uploaded ?? new Date().toISOString())}
                     </p>
                   </div>
                 </div>
                 <div className="flex items-center gap-1">
-                  <Button variant="ghost" size="sm">
-                    <Eye className="h-4 w-4" />
-                  </Button>
-                  <Button variant="ghost" size="sm">
-                    <Download className="h-4 w-4" />
-                  </Button>
+                  {(() => {
+                    const fileId = file?.fileId ?? file?.file_id ?? file?.id
+                    const href = fileId ? `/api/submissions/${submissionId}/files/${fileId}/download` : null
+                    if (!href) return null
+                    return (
+                      <>
+                        <Button variant="ghost" size="sm" asChild>
+                          <a href={href} target="_blank" rel="noreferrer">
+                            <Eye className="h-4 w-4" />
+                          </a>
+                        </Button>
+                        <Button variant="ghost" size="sm" asChild>
+                          <a href={href} target="_blank" rel="noreferrer">
+                            <Download className="h-4 w-4" />
+                          </a>
+                        </Button>
+                      </>
+                    )
+                  })()}
                 </div>
               </div>
             ))}
@@ -203,8 +246,8 @@ export function AuthorCopyeditingPanel({ submissionId, onComplete }: AuthorCopye
           {uploadedFiles.length > 0 && (
             <div className="mt-3 space-y-2">
               {uploadedFiles.map((file) => (
-                <div key={file.id} className="flex items-center justify-between p-2 bg-muted/30 rounded">
-                  <span className="text-sm">{file.fileName}</span>
+                <div key={file.name} className="flex items-center justify-between p-2 bg-muted/30 rounded">
+                  <span className="text-sm">{file.name}</span>
                   <Badge variant="secondary">New</Badge>
                 </div>
               ))}

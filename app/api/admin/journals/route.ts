@@ -1,29 +1,61 @@
-import { createRouteHandlerClient } from '@/lib/supabase/server';
-import { NextResponse } from 'next/server';
-import { SiteService } from '@/lib/services/site.service';
+import { NextRequest, NextResponse } from "next/server"
+import { createClient } from "@/lib/supabase/server"
+import { requireAdmin } from "@/lib/middleware/auth"
+import { logger } from "@/lib/utils/logger"
 
-export const dynamic = 'force-dynamic';
-
-export async function GET(request: Request) {
-    const supabase = await createRouteHandlerClient();
-    const service = new SiteService(supabase);
-    const journals = await service.getAllJournals();
-    return NextResponse.json(journals);
-}
-
-export async function POST(request: Request) {
-    const supabase = await createRouteHandlerClient();
-    const service = new SiteService(supabase);
-    const { path, name, description } = await request.json();
-
-    if (!path || !name) {
-        return NextResponse.json({ error: 'Path and Name required' }, { status: 400 });
-    }
+// GET /api/admin/journals - List all journals (Admin only)
+export async function GET(request: NextRequest) {
+    const startTime = Date.now()
 
     try {
-        const journal = await service.createJournal(path, name, description);
-        return NextResponse.json(journal);
-    } catch (e: any) {
-        return NextResponse.json({ error: e.message }, { status: 500 });
+        // Check authorization
+        const { authorized, user, error } = await requireAdmin(request)
+        if (!authorized) {
+            logger.apiError('/api/admin/journals', 'GET', error)
+            return NextResponse.json({ error }, { status: 403 })
+        }
+
+        logger.apiRequest('/api/admin/journals', 'GET', user?.id)
+
+        const supabase = await createClient()
+        const { data: journals, error: dbError } = await supabase
+            .from("journals")
+            .select("*")
+            .order("created_at", { ascending: false })
+
+        if (dbError) {
+            logger.apiError('/api/admin/journals', 'GET', dbError, user?.id)
+            return NextResponse.json({ error: dbError.message }, { status: 500 })
+        }
+
+        const duration = Date.now() - startTime
+        logger.apiResponse('/api/admin/journals', 'GET', 200, duration, user?.id)
+        return NextResponse.json(journals)
+    } catch (error) {
+        logger.apiError('/api/admin/journals', 'GET', error)
+        return NextResponse.json({ error: "Internal server error" }, { status: 500 })
+    }
+}
+
+export async function POST(request: NextRequest) {
+    try {
+        const body = await request.json()
+        const supabase = await createClient()
+        const { name, acronym, description, path, issn } = body
+
+        if (!name || !path) {
+            return NextResponse.json({ error: "Name and path required" }, { status: 400 })
+        }
+
+        const { data, error } = await supabase
+            .from("journals")
+            .insert({ name, acronym, description, path, issn, enabled: true })
+            .select()
+            .single()
+
+        if (error) return NextResponse.json({ error: error.message }, { status: 500 })
+        return NextResponse.json(data, { status: 201 })
+    } catch (error) {
+        return NextResponse.json({ error: "Internal server error" }, { status: 500 })
     }
 }

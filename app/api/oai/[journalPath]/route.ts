@@ -112,7 +112,7 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
     }
   </${verb}>`)
 
-    case "GetRecord":
+    case "GetRecord": {
       const identifier = searchParams.get("identifier")
       if (!identifier) {
         return createOAIResponse(`
@@ -139,6 +139,7 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
       </metadata>
     </record>
   </GetRecord>`)
+    }
 
     default:
       return createOAIResponse(`

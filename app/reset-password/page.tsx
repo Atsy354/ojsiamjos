@@ -126,7 +126,7 @@ export default function ResetPasswordPage() {
 
         <Card>
           <CardHeader className="text-center">
-            <div className="mx-auto h-12 w-12 rounded-xl bg-[#0d4a5e] flex items-center justify-center mb-4">
+            <div className="mx-auto h-12 w-12 rounded-xl bg-primary flex items-center justify-center mb-4">
               <BookOpen className="h-6 w-6 text-white" />
             </div>
             <CardTitle className="text-2xl">{success ? "Password Reset!" : "Create New Password"}</CardTitle>
@@ -144,7 +144,7 @@ export default function ResetPasswordPage() {
                   </AlertDescription>
                 </Alert>
 
-                <Button className="w-full h-11 bg-[#0d4a5e] hover:bg-[#0a3d4e]" onClick={() => router.push("/login")}>
+                <Button className="w-full h-11" onClick={() => router.push("/login")}>
                   Sign In
                 </Button>
               </div>
@@ -231,7 +231,7 @@ export default function ResetPasswordPage() {
 
                 <Button
                   type="submit"
-                  className="w-full h-11 bg-[#0d4a5e] hover:bg-[#0a3d4e]"
+                  className="w-full h-11"
                   disabled={isLoading || password !== confirmPassword}
                 >
                   {isLoading ? (

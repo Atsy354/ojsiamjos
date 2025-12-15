@@ -1,0 +1,502 @@
+"use client"
+
+import type React from "react"
+
+import { useEffect, useState } from "react"
+import { useParams, useRouter } from "next/navigation"
+import { DashboardLayout } from "@/components/layout/dashboard-layout"
+import { useSubmissionAPI } from "@/lib/hooks/use-submissions-api"
+import { useReviewRoundsAPI, useReviewsAPI } from "@/lib/hooks/use-reviews-api"
+import { useAuth } from "@/lib/hooks/use-auth"
+import { apiGet, apiPost, apiPut } from "@/lib/api/client"
+import { toast } from "sonner"
+import { apiPost as apiPostHelper } from "@/lib/api/client"
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
+import { Badge } from "@/components/ui/badge"
+import { Button } from "@/components/ui/button"
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
+import { Avatar, AvatarFallback } from "@/components/ui/avatar"
+import { Separator } from "@/components/ui/separator"
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+  DialogTrigger,
+} from "@/components/ui/dialog"
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
+import { Textarea } from "@/components/ui/textarea"
+import { Label } from "@/components/ui/label"
+import { ArrowLeft, FileText, Clock, CheckCircle, XCircle, AlertTriangle, Send, UserPlus, Download, Users, History, FolderOpen } from "lucide-react"
+import Link from "next/link"
+import { format } from "date-fns"
+import type { SubmissionStatus, User } from "@/lib/types"
+import { STATUS_QUEUED } from "@/lib/workflow/ojs-constants"
+import { getSubmissionStatusColors, getStatusBadgeVariant } from "@/lib/ui/status-colors"
+import { getStatusDisplayLabel } from "@/lib/utils/status-helpers"
+
+// Status icon mapping
+const statusIcons: Record<number, React.ComponentType<{ className?: string }>> = {
+  [STATUS_QUEUED]: Clock,
+}
+
+function getStatusConfigForSubmission(status: SubmissionStatus, stageId?: number) {
+  const statusColors = getSubmissionStatusColors(status, stageId)
+  const statusLabel = statusColors.label || getStatusDisplayLabel(status)
+
+  // Determine icon based on status
+  let Icon = Clock
+  if (typeof status === "number") {
+    Icon = statusIcons[status] || Clock
+  } else {
+    if (status === "published" || status === "accepted") Icon = CheckCircle
+    else if (status === "declined") Icon = XCircle
+    else if (status === "submitted") Icon = Send
+    else Icon = Clock
+  }
+
+  return {
+    label: statusLabel,
+    color: statusColors.badge,
+    icon: Icon,
+  }
+}
+
+// Helper for review status colors
+function getReviewStatusColors(status: string) {
+  switch (status) {
+    case 'completed':
+      return { badge: 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-400' }
+    case 'accepted':
+      return { badge: 'bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400' }
+    case 'declined':
+      return { badge: 'bg-gray-100 text-gray-700 dark:bg-gray-900/30 dark:text-gray-400' }
+    default:
+      return { badge: 'bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400' }
+  }
+}
+
+// Helper for recommendation colors
+function getRecommendationColors(recommendation: string) {
+  switch (recommendation) {
+    case 'accept':
+    case 'Accept':
+      return { badge: 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-400' }
+    case 'decline':
+    case 'Decline':
+      return { badge: 'bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400' }
+    case 'revision_required':
+    case 'Revisions Required':
+      return { badge: 'bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400' }
+    default:
+      return { badge: 'bg-gray-100 text-gray-700 dark:bg-gray-900/30 dark:text-gray-400' }
+  }
+}
+
+export default function SubmissionDetailPage() {
+  const params = useParams()
+  const router = useRouter()
+  const { user, isEditor } = useAuth()
+  const { submission, isLoading, update } = useSubmissionAPI(params.id as string)
+  const { rounds: rawRounds } = useReviewRoundsAPI(params.id as string)
+  const { assignReviewer } = useReviewsAPI()
+  const [mounted, setMounted] = useState(false)
+  const [reviewers, setReviewers] = useState<User[]>([])
+  const [selectedReviewer, setSelectedReviewer] = useState("")
+  const [decisionDialog, setDecisionDialog] = useState(false)
+  const [decision, setDecision] = useState("")
+  const [decisionComments, setDecisionComments] = useState("")
+  const [reviews, setReviews] = useState<any[]>([])
+  const [files, setFiles] = useState<any[]>([])
+  const [loadingFiles, setLoadingFiles] = useState(false)
+
+  // SAFE: Ensure rounds is always an array
+  const rounds = Array.isArray(rawRounds) ? rawRounds : []
+
+  useEffect(() => {
+    setMounted(true)
+
+    // Fetch reviewers from API (editorial endpoint for journal-scoped reviewers)
+    const fetchReviewers = async () => {
+      try {
+        const users = await apiGet<User[]>("/api/editorial/reviewers?role=reviewer")
+        setReviewers(Array.isArray(users) ? users : [])
+      } catch (err) {
+        console.error("Failed to fetch reviewers:", err)
+        setReviewers([])
+      }
+    }
+
+    if (isEditor) {
+      fetchReviewers()
+    }
+
+    // Fetch reviews for this submission
+    const fetchReviews = async () => {
+      try {
+        const reviewsData = await apiGet<any[]>(`/api/reviews?submissionId=${params.id}`)
+        setReviews(Array.isArray(reviewsData) ? reviewsData : [])
+      } catch (err) {
+        console.error("Failed to fetch reviews:", err)
+        setReviews([])
+      }
+    }
+
+    // Fetch files for this submission
+    const fetchFiles = async () => {
+      try {
+        setLoadingFiles(true)
+        const filesData = await apiGet<any[]>(`/api/submissions/${params.id}/files?submissionId=${params.id}`)
+        setFiles(Array.isArray(filesData) ? filesData : [])
+      } catch (err) {
+        console.error("Failed to fetch files:", err)
+        setFiles([])
+      } finally {
+        setLoadingFiles(false)
+      }
+    }
+
+    if (submission) {
+      fetchReviews()
+      fetchFiles()
+    }
+  }, [isEditor, params.id, submission])
+
+  // SubmissionFilesList component
+  const SubmissionFilesList = ({ submissionId }: { submissionId: string }) => {
+    if (loadingFiles) {
+      return (
+        <div className="flex items-center justify-center py-8">
+          <div className="h-6 w-6 animate-spin rounded-full border-2 border-primary border-t-transparent" />
+        </div>
+      )
+    }
+
+    if (!Array.isArray(files) || files.length === 0) {
+      return (
+        <div className="flex flex-col items-center justify-center py-8 text-center">
+          <FolderOpen className="mb-2 h-8 w-8 text-muted-foreground" />
+          <p className="text-sm text-muted-foreground">No files uploaded</p>
+        </div>
+      )
+    }
+
+    return (
+      <div className="space-y-2">
+        {files.map((file: any) => (
+          <div
+            key={file?.id || Math.random()}
+            className="flex items-center justify-between rounded-lg border p-3 hover:bg-muted/50 transition-colors"
+          >
+            <div className="flex items-center gap-3 flex-1 min-w-0">
+              <FileText className="h-5 w-5 text-muted-foreground flex-shrink-0" />
+              <div className="flex-1 min-w-0">
+                <p className="text-sm font-medium truncate">{file?.file_name || file?.fileName || 'Unnamed File'}</p>
+                <div className="flex items-center gap-2 mt-1">
+                  <Badge variant="outline" className="text-xs">
+                    {file?.stage || file?.fileType || "submission"}
+                  </Badge>
+                  {file?.file_size && (
+                    <span className="text-xs text-muted-foreground">
+                      {(file.file_size / 1024 / 1024).toFixed(2)} MB
+                    </span>
+                  )}
+                  {file?.date_uploaded && (
+                    <span className="text-xs text-muted-foreground">
+                      {format(new Date(file.date_uploaded), "MMM d, yyyy")}
+                    </span>
+                  )}
+                </div>
+              </div>
+            </div>
+            {file?.file_path && (
+              <Button variant="ghost" size="sm" asChild>
+                <a
+                  href={`/api/files/${file.id}`}
+                  download
+                  className="flex items-center gap-1"
+                >
+                  <Download className="h-4 w-4" />
+                </a>
+              </Button>
+            )}
+          </div>
+        ))}
+      </div>
+    )
+  }
+
+  if (!mounted || isLoading || !submission) {
+    return (
+      <DashboardLayout title="Submission Details" subtitle="Loading...">
+        <div className="flex items-center justify-center py-12">
+          <div className="h-8 w-8 animate-spin rounded-full border-4 border-primary border-t-transparent" />
+        </div>
+      </DashboardLayout>
+    )
+  }
+
+  const statusConfig = getStatusConfigForSubmission(submission.status, submission.stageId)
+  const StatusIcon = statusConfig.icon
+
+  const handleSendToReview = async () => {
+    try {
+      // Create review round via API (this will also update status to under_review)
+      await apiPostHelper("/api/reviews/rounds", {
+        submissionId: submission!.id,
+      })
+      toast.success("Submission sent to review")
+      // Refresh page to get updated data
+      setTimeout(() => {
+        router.refresh()
+      }, 500)
+    } catch (error: any) {
+      toast.error(error.message || "Failed to send to review")
+    }
+  }
+
+  const handleAssignReviewer = async () => {
+    if (!selectedReviewer) {
+      toast.error("Please select a reviewer")
+      return
+    }
+
+    if (!rounds || rounds.length === 0) {
+      // Create review round first
+      try {
+        await handleSendToReview()
+        // Wait a bit for round to be created, then assign
+        setTimeout(async () => {
+          await assignReviewerHandler()
+        }, 500)
+      } catch (error) {
+        console.error("Failed to create review round:", error)
+      }
+      return
+    }
+
+    await assignReviewerHandler()
+  }
+
+  const assignReviewerHandler = async () => {
+    try {
+      const currentRound = rounds && rounds.length > 0 ? rounds[rounds.length - 1] : null
+      if (!currentRound) {
+        toast.error("No active review round found")
+        return
+      }
+      const dateDue = new Date(Date.now() + 14 * 24 * 60 * 60 * 1000).toISOString()
+
+      await assignReviewer({
+        submissionId: submission!.id,
+        reviewerId: selectedReviewer,
+        reviewRoundId: currentRound.id,
+        dateDue,
+      })
+
+      toast.success("Reviewer assigned successfully")
+      setSelectedReviewer("")
+      // Refresh reviews
+      const reviewsData = await apiGet<any[]>(`/api/reviews?submissionId=${submission!.id}`)
+      setReviews(Array.isArray(reviewsData) ? reviewsData : [])
+    } catch (error: any) {
+      toast.error(error.message || "Failed to assign reviewer")
+    }
+  }
+
+  const handleDecision = async () => {
+    if (!decision) return
+
+    try {
+      const statusMap: Record<string, SubmissionStatus> = {
+        accept: "accepted",
+        decline: "declined",
+        revisions: "revision_required",
+      }
+
+      await update({
+        status: statusMap[decision] || submission!.status
+      })
+
+      // Create editorial decision record
+      const currentRound = rounds && rounds.length > 0 ? rounds[rounds.length - 1].id : null
+      try {
+        await apiPost("/api/submissions/" + submission!.id + "/decision", {
+          decision,
+          comments: decisionComments,
+          reviewRoundId: currentRound,
+        })
+      } catch (err: any) {
+        // Decision endpoint will handle status update, but continue if it fails
+        console.log("Decision endpoint error:", err.message)
+      }
+
+      toast.success("Decision recorded successfully")
+      setDecisionDialog(false)
+      setDecision("")
+      setDecisionComments("")
+    } catch (error: any) {
+      toast.error(error.message || "Failed to record decision")
+    }
+  }
+
+  // SAFE: Get authors array
+  const authors = Array.isArray(submission?.authors) ? submission.authors : []
+  const keywords = Array.isArray(submission?.keywords) ? submission.keywords : []
+
+  return (
+    <DashboardLayout title="Submission Details" subtitle={`ID: ${String(submission?.id || '').slice(-8) || 'N/A'}`}>
+      <div className="space-y-6">
+        {/* Back button and actions */}
+        <div className="flex items-center justify-between">
+          <Button variant="ghost" asChild>
+            <Link href="/submissions">
+              <ArrowLeft className="mr-2 h-4 w-4" />
+              Back to Submissions
+            </Link>
+          </Button>
+
+          {isEditor && (
+            <div className="flex items-center gap-2">
+              {/* Show "Send to Review" button if status is QUEUED and stage is Submission */}
+              {((typeof submission.status === "number" && submission.status === STATUS_QUEUED && submission.stageId === 1) ||
+                (typeof submission.status === "string" && (submission.status === "submitted" || submission.status === "incomplete"))) && (
+                  <Button onClick={handleSendToReview}>
+                    <Send className="mr-2 h-4 w-4" />
+                    Send to Review
+                  </Button>
+                )}
+
+              {/* Show decision dialog if status is QUEUED and stage is Review */}
+              {((typeof submission.status === "number" && submission.status === STATUS_QUEUED && submission.stageId === 3) ||
+                (typeof submission.status === "string" && submission.status === "under_review")) && (
+                  <Dialog open={decisionDialog} onOpenChange={setDecisionDialog}>
+                    <DialogTrigger asChild>
+                      <Button>
+                        <CheckCircle className="mr-2 h-4 w-4" />
+                        Record Decision
+                      </Button>
+                    </DialogTrigger>
+                    <DialogContent>
+                      <DialogHeader>
+                        <DialogTitle>Editorial Decision</DialogTitle>
+                        <DialogDescription>Record your decision for this submission</DialogDescription>
+                      </DialogHeader>
+                      <div className="space-y-4 py-4">
+                        <div className="space-y-2">
+                          <Label>Decision</Label>
+                          <Select value={decision} onValueChange={setDecision}>
+                            <SelectTrigger>
+                              <SelectValue placeholder="Select decision" />
+                            </SelectTrigger>
+                            <SelectContent>
+                              <SelectItem value="accept">Accept Submission</SelectItem>
+                              <SelectItem value="revisions">Request Revisions</SelectItem>
+                              <SelectItem value="decline">Decline Submission</SelectItem>
+                            </SelectContent>
+                          </Select>
+                        </div>
+                        <div className="space-y-2">
+                          <Label>Comments to Author</Label>
+                          <Textarea
+                            value={decisionComments}
+                            onChange={(e) => setDecisionComments(e.target.value)}
+                            placeholder="Enter your comments..."
+                            rows={4}
+                          />
+                        </div>
+                      </div>
+                      <DialogFooter>
+                        <Button variant="outline" onClick={() => setDecisionDialog(false)}>
+                          Cancel
+                        </Button>
+                        <Button onClick={handleDecision}>Submit Decision</Button>
+                      </DialogFooter>
+                    </DialogContent>
+                  </Dialog>
+                )}
+            </div>
+          )}
+        </div>
+
+        {/* Main content - TRUNCATED FOR LENGTH - Will continue in next file write */}
+        <div className="grid gap-6 lg:grid-cols-3">
+          <div className="lg:col-span-2 space-y-6">
+            <Card>
+              <CardHeader>
+                <div className="flex items-start justify-between gap-4">
+                  <div className="space-y-1">
+                    <Badge variant={getStatusBadgeVariant(submission.status)} className={statusConfig.color}>
+                      <StatusIcon className="mr-1 h-3 w-3" />
+                      {statusConfig.label}
+                    </Badge>
+                    <CardTitle className="text-xl">{submission?.title || 'Untitled'}</CardTitle>
+                  </div>
+                </div>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                <div>
+                  <h4 className="mb-2 text-sm font-medium text-muted-foreground">Abstract</h4>
+                  <p className="text-sm leading-relaxed">{submission?.abstract || 'No abstract provided'}</p>
+                </div>
+
+                {keywords.length > 0 && (
+                  <div>
+                    <h4 className="mb-2 text-sm font-medium text-muted-foreground">Keywords</h4>
+                    <div className="flex flex-wrap gap-2">
+                      {keywords.map((keyword, idx) => (
+                        <Badge key={`keyword-${idx}`} variant="outline">
+                          {keyword}
+                        </Badge>
+                      ))}
+                    </div>
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+
+            <p className="text-sm text-muted-foreground">Loading tabs...</p>
+          </div>
+
+          <div className="space-y-6">
+            <Card>
+              <CardHeader>
+                <CardTitle className="text-base">Authors</CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-3">
+                {authors.length === 0 ? (
+                  <p className="text-sm text-muted-foreground">No authors listed</p>
+                ) : (
+                  authors.map((author: any, index) => (
+                    <div key={author?.id || `author-${index}`} className="flex items-start gap-3">
+                      <Avatar className="h-8 w-8">
+                        <AvatarFallback className="text-xs">
+                          {author?.firstName?.[0] || 'A'}
+                          {author?.lastName?.[0] || 'U'}
+                        </AvatarFallback>
+                      </Avatar>
+                      <div>
+                        <p className="text-sm font-medium">
+                          {author?.firstName || ''} {author?.lastName || ''}
+                          {author?.isPrimary && (
+                            <Badge variant="outline" className="ml-2 text-xs">
+                              Primary
+                            </Badge>
+                          )}
+                        </p>
+                        <p className="text-xs text-muted-foreground">{author?.affiliation || ''}</p>
+                        <p className="text-xs text-muted-foreground">{author?.email || ''}</p>
+                      </div>
+                    </div>
+                  ))
+                )}
+              </CardContent>
+            </Card>
+          </div>
+        </div>
+      </div>
+    </DashboardLayout>
+  )
+}

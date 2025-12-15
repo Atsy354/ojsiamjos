@@ -1,13 +1,13 @@
-import { createRouteHandlerClient } from '@/lib/supabase/server';
+import { createClient } from '@/lib/supabase/server';
 import { NextResponse } from 'next/server';
 
 export const dynamic = 'force-dynamic';
 
 export async function GET(request: Request) {
-    const supabase = await createRouteHandlerClient();
-    const { data: { session } } = await supabase.auth.getSession();
+    const supabase = await createClient();
+    const { data: { user: authUser }, error: authUserError } = await supabase.auth.getUser();
 
-    if (!session) {
+    if (authUserError || !authUser) {
         return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
@@ -23,7 +23,7 @@ export async function GET(request: Request) {
         abstract
       )
     `)
-        .eq('reviewer_id', session.user.id);
+        .eq('reviewer_id', authUser.id);
 
     if (error) {
         return NextResponse.json({ error: error.message }, { status: 500 });

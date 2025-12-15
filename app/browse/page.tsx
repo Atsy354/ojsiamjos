@@ -4,9 +4,7 @@ import type React from "react"
 
 import { useEffect, useState, useMemo, useCallback, memo } from "react"
 import Link from "next/link"
-import { journalService } from "@/lib/services/journal-service"
-import { issueService } from "@/lib/services/content-service"
-import { initializeStorage } from "@/lib/storage"
+import { apiGet } from "@/lib/api/client"
 import { APP_NAME, ROUTES } from "@/lib/constants"
 import { Input } from "@/components/ui/input"
 import { Button } from "@/components/ui/button"
@@ -162,37 +160,32 @@ export default function BrowsePage() {
   const [error, setError] = useState<string | null>(null)
 
   useEffect(() => {
-    try {
-      initializeStorage()
-      setMounted(true)
+    const run = async () => {
+      try {
+        setMounted(true)
 
-      const timer = setTimeout(() => {
-        try {
-          const allJournals = journalService.getAll()
-          setJournals(allJournals || [])
+        const allJournals = await apiGet<any[]>("/api/journals").catch(() => [])
+        const journalsArr = Array.isArray(allJournals) ? allJournals : []
+        setJournals(journalsArr as any)
 
-          // Load issues for each journal
-          const issuesMap: Record<string, Issue[]> = {}
-          if (allJournals && allJournals.length > 0) {
-            allJournals.forEach((j) => {
-              if (j && j.id) {
-                issuesMap[j.id] = issueService.getPublished(j.id) || []
-              }
-            })
-          }
-          setIssuesByJournal(issuesMap)
-        } catch (err) {
-          console.error("[v0] Error loading journals:", err)
-          setError("Failed to load journals")
-        }
-      }, 0)
-
-      return () => clearTimeout(timer)
-    } catch (err) {
-      console.error("[v0] Error initializing storage:", err)
-      setError("Failed to initialize application")
-      setMounted(true)
+        const issuesMap: Record<string, Issue[]> = {}
+        // Load published issues per journal (best-effort)
+        await Promise.all(
+          journalsArr.map(async (j: any) => {
+            const jid = j?.id || j?.journalId || j?.journal_id
+            if (!jid) return
+            const issues = await apiGet<any[]>(`/api/issues?journalId=${jid}&status=published`).catch(() => [])
+            issuesMap[String(jid)] = (Array.isArray(issues) ? issues : []) as any
+          }),
+        )
+        setIssuesByJournal(issuesMap)
+      } catch (err) {
+        console.error("[Browse] Error loading journals:", err)
+        setError("Failed to load journals")
+      }
     }
+
+    run()
   }, [])
 
   // Filter and sort journals

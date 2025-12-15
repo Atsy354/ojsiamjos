@@ -1,4 +1,4 @@
-import { createRouteHandlerClient } from '@/lib/supabase/server';
+import { createClient } from '@/lib/supabase/server';
 import { NextResponse } from 'next/server';
 import { writeFile, mkdir } from 'fs/promises';
 import { join } from 'path';
@@ -7,7 +7,7 @@ export const dynamic = 'force-dynamic';
 
 export async function POST(request: Request) {
     try {
-        const supabase = await createRouteHandlerClient();
+        const supabase = await createClient();
         const formData = await request.formData();
 
         const file = formData.get('file') as File;
@@ -20,9 +20,9 @@ export async function POST(request: Request) {
             return NextResponse.json({ error: 'Missing file or submissionId' }, { status: 400 });
         }
 
-        const { data: session } = await supabase.auth.getSession();
-        if (!session.session) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-        const userId = session.session.user.id;
+        const { data: { user: authUser }, error: authUserError } = await supabase.auth.getUser();
+        if (authUserError || !authUser) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+        const userId = authUser.id;
 
         // 1. Save Physical File (Simulated OJS files_dir)
         const buffer = Buffer.from(await file.arrayBuffer());

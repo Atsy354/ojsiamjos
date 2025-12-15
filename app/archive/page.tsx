@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react"
 import { DashboardLayout } from "@/components/layout/dashboard-layout"
-import { issueService, journalService, initializeStorage } from "@/lib/storage"
+import { apiGet } from "@/lib/api/client"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
@@ -16,14 +16,20 @@ export default function ArchivePage() {
   const [journal, setJournal] = useState<{ name: string; issn?: string } | null>(null)
 
   useEffect(() => {
-    initializeStorage()
     setMounted(true)
 
-    const journals = journalService.getAll()
-    if (journals.length > 0) {
-      setJournal({ name: journals[0].name, issn: journals[0].issn })
-      setIssues(issueService.getPublished(journals[0].id))
-    }
+    apiGet<any[]>("/api/journals")
+      .then(async (journals) => {
+        const list = Array.isArray(journals) ? journals : []
+        if (list.length === 0) return
+        const j = list[0]
+        setJournal({ name: j.name, issn: j.issn })
+        const issuesResp = await apiGet<Issue[]>(`/api/issues?status=published&journalId=${encodeURIComponent(String(j.id))}`)
+        setIssues(Array.isArray(issuesResp) ? issuesResp : [])
+      })
+      .catch(() => {
+        setIssues([])
+      })
   }, [])
 
   if (!mounted) {

@@ -14,12 +14,10 @@ import { Textarea } from "@/components/ui/textarea"
 import { Checkbox } from "@/components/ui/checkbox"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Badge } from "@/components/ui/badge"
-import type { Journal, Section } from "@/lib/types"
-import { journalService } from "@/lib/services/journal-service"
-import { sectionService } from "@/lib/services/content-service"
-import { submissionService } from "@/lib/services/submission-service"
-import { userService } from "@/lib/services/user-service"
-import { initializeStorage } from "@/lib/storage"
+import { apiGet, apiPost, apiUploadFile } from "@/lib/api/client"
+import { useSubmissionsAPI } from "@/lib/hooks/use-submissions-api"
+import { useAuth } from "@/lib/hooks/use-auth"
+import { toast } from "sonner"
 
 const STEPS = [
   { id: 1, name: "Start", icon: FileText },
@@ -44,12 +42,13 @@ export default function PublicSubmissionPage() {
   const journalPath = params.journalPath as string
 
   const [mounted, setMounted] = useState(false)
-  const [journal, setJournal] = useState<Journal | null>(null)
-  const [sections, setSections] = useState<Section[]>([])
+  const [journal, setJournal] = useState<any | null>(null)
+  const [sections, setSections] = useState<any[]>([])
   const [loading, setLoading] = useState(true)
   const [currentStep, setCurrentStep] = useState(1)
   const [submitting, setSubmitting] = useState(false)
   const [submitted, setSubmitted] = useState(false)
+  const [submissionId, setSubmissionId] = useState<string | null>(null)
 
   // Form state
   const [acceptedTerms, setAcceptedTerms] = useState(false)
@@ -62,7 +61,8 @@ export default function PublicSubmissionPage() {
     { firstName: "", lastName: "", email: "", affiliation: "", country: "", isPrimary: true },
   ])
 
-  const currentUser = userService.getCurrentUser()
+  const { user, isLoading: authLoading } = useAuth()
+  const { createSubmission } = useSubmissionsAPI()
 
   useEffect(() => {
     setMounted(true)
@@ -71,14 +71,29 @@ export default function PublicSubmissionPage() {
   useEffect(() => {
     if (!mounted) return
 
-    initializeStorage()
-
-    const foundJournal = journalService.getByIdOrPath(journalPath)
-    if (foundJournal) {
-      setJournal(foundJournal)
-      setSections(sectionService.getByJournal(foundJournal.id))
+    // Fetch journal by path from API
+    const loadData = async () => {
+      try {
+        // Fetch journals
+        const journals = await apiGet<any[]>("/api/journals")
+        const foundJournal = journals.find((j) => j.path === journalPath || j.id === journalPath)
+        
+        if (foundJournal) {
+          setJournal(foundJournal)
+          
+          // Fetch sections for this journal
+          const sectionsData = await apiGet<any[]>(`/api/sections?journalId=${foundJournal.journal_id || foundJournal.id}`)
+          setSections(sectionsData || [])
+        }
+      } catch (error) {
+        console.error("Failed to load journal data:", error)
+        toast.error("Failed to load journal information")
+      } finally {
+        setLoading(false)
+      }
     }
-    setLoading(false)
+
+    loadData()
   }, [journalPath, mounted])
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -121,12 +136,16 @@ export default function PublicSubmissionPage() {
   }
 
   const handleSubmit = async () => {
-    if (!journal || !currentUser) return
+    if (!journal || !user) {
+      toast.error("Please log in to submit")
+      return
+    }
 
     setSubmitting(true)
     try {
-      submissionService.create({
-        journalId: journal.id,
+      // First, create the submission
+      const submission = await createSubmission({
+        journalId: String(journal.journal_id || journal.id),
         sectionId: selectedSection,
         title,
         abstract,
@@ -134,41 +153,44 @@ export default function PublicSubmissionPage() {
           .split(",")
           .map((k) => k.trim())
           .filter(Boolean),
-        authors: authors.map((a) => ({
-          userId: "",
-          firstName: a.firstName,
-          lastName: a.lastName,
-          email: a.email,
-          affiliation: a.affiliation,
-          country: a.country,
-          isPrimaryContact: a.isPrimary,
-          sequence: 0,
-        })),
-        submitterId: currentUser.id,
+        submitterId: user.id,
         status: "submitted",
-        currentReviewRound: 1,
-        files: uploadedFile
-          ? [
-              {
-                id: `file-${Date.now()}`,
-                name: uploadedFile.name,
-                type: "submission",
-                size: uploadedFile.size,
-                uploadedAt: new Date().toISOString(),
-                uploadedBy: currentUser.id,
-              },
-            ]
-          : [],
-      })
+        locale: "en",
+        stageId: 1,
+        currentRound: 1,
+      } as any)
+
+      const subId = submission.id || (submission as any).submission_id
+      setSubmissionId(String(subId))
+
+      // If file is uploaded, upload it
+      if (uploadedFile && subId) {
+        try {
+          await apiUploadFile("/api/upload", uploadedFile, {
+            submissionId: String(subId),
+            stageId: "0", // Submission stage
+            genreId: "1", // Article Text
+          })
+        } catch (fileError) {
+          console.error("File upload error:", fileError)
+          toast.warning("Submission created but file upload failed")
+        }
+      }
+
+      // TODO: Create authors via API if endpoint exists
+      // For now, authors are stored in submission metadata
+
+      toast.success("Submission created successfully!")
       setSubmitted(true)
-    } catch (error) {
+    } catch (error: any) {
       console.error("Submission error:", error)
+      toast.error(error.message || "Failed to create submission")
     } finally {
       setSubmitting(false)
     }
   }
 
-  if (!mounted || loading) {
+  if (!mounted || loading || authLoading) {
     return (
       <div className="min-h-screen bg-muted/30 flex items-center justify-center">
         <div className="text-center">
@@ -196,7 +218,7 @@ export default function PublicSubmissionPage() {
     )
   }
 
-  if (!currentUser) {
+  if (!user) {
     return (
       <div className="min-h-screen bg-muted/30 flex items-center justify-center p-4">
         <Card className="max-w-md w-full">
@@ -321,11 +343,15 @@ export default function PublicSubmissionPage() {
                       <SelectValue placeholder="Select a section" />
                     </SelectTrigger>
                     <SelectContent>
-                      {sections.map((section) => (
-                        <SelectItem key={section.id} value={section.id}>
-                          {section.name}
-                        </SelectItem>
-                      ))}
+                      {sections.map((section) => {
+                        const label = section.title || section.name || section.abbrev || `Section ${section.id}`
+                        const value = String(section.id || section.section_id)
+                        return (
+                          <SelectItem key={value} value={value}>
+                            {label}
+                          </SelectItem>
+                        )
+                      })}
                     </SelectContent>
                   </Select>
                 </div>

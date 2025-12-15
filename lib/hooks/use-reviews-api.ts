@@ -38,7 +38,14 @@ export function useReviewsAPI(reviewerId?: string) {
     dateDue?: string
   }) => {
     try {
-      const assignment = await apiPost<ReviewAssignment>("/api/reviews", data)
+      const assignmentResponse = await apiPost<any>("/api/reviews/assign", {
+        submissionId: data.submissionId,
+        reviewerId: data.reviewerId,
+        reviewRoundId: data.reviewRoundId,
+        dateDue: data.dateDue,
+      })
+
+      const assignment = (assignmentResponse as any)?.data ?? assignmentResponse
       setAssignments((prev) => [...prev, assignment as any])
       return assignment
     } catch (err: any) {
@@ -118,15 +125,28 @@ export function useReviewsAPI(reviewerId?: string) {
 export function useReviewRoundsAPI(submissionId: string) {
   const [rounds, setRounds] = useState<any[]>([])
   const [isLoading, setIsLoading] = useState(true)
+  const [error, setError] = useState<string | null>(null)
 
   const fetchRounds = useCallback(async () => {
-    if (!submissionId) return
+    if (!submissionId) {
+      setIsLoading(false)
+      return
+    }
+
     setIsLoading(true)
+    setError(null)
+
     try {
       const data = await apiGet<any[]>(`/api/reviews/rounds?submissionId=${submissionId}`)
-      setRounds(data)
+      setRounds(data || [])
     } catch (err: any) {
-      console.error("Failed to fetch review rounds:", err)
+      // Don't log error if submission simply has no rounds yet (normal state)
+      if (err.message !== "Submission not found") {
+        console.error("Failed to fetch review rounds:", err)
+        setError(err.message)
+      }
+      // Set empty array even on error - submission might be valid but have no rounds
+      setRounds([])
     } finally {
       setIsLoading(false)
     }
@@ -139,6 +159,7 @@ export function useReviewRoundsAPI(submissionId: string) {
   return {
     rounds,
     isLoading,
+    error,
     refetch: fetchRounds,
   }
 }

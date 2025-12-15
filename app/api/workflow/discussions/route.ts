@@ -1,4 +1,4 @@
-import { createRouteHandlerClient } from '@/lib/supabase/server';
+import { createClient } from '@/lib/supabase/server';
 import { NextResponse } from 'next/server';
 
 export const dynamic = 'force-dynamic';
@@ -8,7 +8,7 @@ const ASSOC_TYPE_QUERY = 1048586; // OJS Constant
 
 // GET: List discussions for a submission stage
 export async function GET(request: Request) {
-    const supabase = await createRouteHandlerClient();
+    const supabase = await createClient();
     const { searchParams } = new URL(request.url);
     const submissionId = searchParams.get('submissionId');
     const stageId = searchParams.get('stageId');
@@ -38,12 +38,12 @@ export async function GET(request: Request) {
 
 // POST: Create new discussion start
 export async function POST(request: Request) {
-    const supabase = await createRouteHandlerClient();
+    const supabase = await createClient();
     const { submissionId, stageId, subject, message, participantIds } = await request.json();
 
-    const { data: session } = await supabase.auth.getSession();
-    if (!session.session) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-    const userId = session.session.user.id;
+    const { data: { user: authUser }, error: authUserError } = await supabase.auth.getUser();
+    if (authUserError || !authUser) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    const userId = authUser.id;
 
     // 1. Create Query
     const { data: query, error: queryError } = await supabase

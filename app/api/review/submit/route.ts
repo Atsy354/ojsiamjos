@@ -1,14 +1,14 @@
-import { createRouteHandlerClient } from '@/lib/supabase/server';
+import { createClient } from '@/lib/supabase/server';
 import { NextResponse } from 'next/server';
 
 export const dynamic = 'force-dynamic';
 
 export async function POST(request: Request) {
-    const supabase = await createRouteHandlerClient();
+    const supabase = await createClient();
     const { reviewId, recommendation, comments } = await request.json();
 
-    const { data: { session } } = await supabase.auth.getSession();
-    if (!session) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    const { data: { user: authUser }, error: authUserError } = await supabase.auth.getUser();
+    if (authUserError || !authUser) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
 
     // Update Review Assignment
     const { data, error } = await supabase
@@ -19,7 +19,7 @@ export async function POST(request: Request) {
             status: 2 // COMPLETED
         })
         .eq('id', reviewId)
-        .eq('reviewer_id', session.user.id)
+        .eq('reviewer_id', authUser.id)
         .select();
 
     // Optionally insert comments into review_form_responses or similar

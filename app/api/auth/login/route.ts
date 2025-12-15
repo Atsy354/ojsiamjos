@@ -41,13 +41,29 @@ export async function POST(request: NextRequest) {
       )
     }
 
+    // Merge roles from per-journal memberships (user_journal_roles)
+    const rolesSet = new Set<string>(Array.isArray(user.roles) ? user.roles : [])
+    const { data: memberships } = await supabase
+      .from("user_journal_roles")
+      .select("role")
+      .eq("user_id", user.id)
+
+    if (Array.isArray(memberships)) {
+      memberships.forEach((m: any) => {
+        if (m?.role) rolesSet.add(m.role)
+      })
+    }
+
+    // Return success with token and user data
     return NextResponse.json({
       user: {
         id: user.id,
         email: user.email,
         firstName: user.first_name,
         lastName: user.last_name,
-        roles: user.roles || [],
+        roles: Array.from(rolesSet),
+        role_ids: user.role_ids || [],
+        journalId: user.journal_id || null,
       },
       session: data.session,
     })

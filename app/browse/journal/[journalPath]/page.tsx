@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react"
 import { useParams } from "next/navigation"
 import Link from "next/link"
-import { journalService, issueService, submissionService, initializeStorage } from "@/lib/storage"
+import { apiGet } from "@/lib/api/client"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { Input } from "@/components/ui/input"
@@ -21,17 +21,42 @@ export default function JournalDetailPage() {
   const [activeTab, setActiveTab] = useState<"about" | "issues" | "articles">("about")
 
   useEffect(() => {
-    initializeStorage()
-    setMounted(true)
+    const run = async () => {
+      setMounted(true)
 
-    const j = journalService.getByIdOrPath(journalPath)
-    if (j) {
-      setJournal(j)
-      setIssues(issueService.getByJournal(j.id))
+      const journals = await apiGet<any[]>("/api/journals").catch(() => [])
+      const journalsArr = Array.isArray(journals) ? journals : []
+      const j = journalsArr.find((x: any) => String(x?.path) === String(journalPath) || String(x?.id) === String(journalPath))
 
-      const allSubs = submissionService.getAll()
-      setArticles(allSubs.filter((s) => s.journalId === j.id && (s.status === "accepted" || s.status === "published")))
+      if (!j) {
+        setJournal(null)
+        setIssues([])
+        setArticles([])
+        return
+      }
+
+      setJournal(j as any)
+
+      const jid = j?.id || j?.journalId || j?.journal_id
+      const issuesResp = await apiGet<any[]>(`/api/issues?journalId=${jid}`).catch(() => [])
+      setIssues((Array.isArray(issuesResp) ? issuesResp : []) as any)
+
+      // Articles: derive from publications (published only) so public view matches TOC
+      const pubs = await apiGet<any[]>(`/api/publications?status=published`).catch(() => [])
+      const pubsArr = Array.isArray(pubs) ? pubs : []
+      const filteredArticles = pubsArr
+        .filter((p: any) => {
+          const issueJournalId = p?.issue?.journalId || p?.issue?.journal_id
+          const submissionJournalId = p?.submission?.journalId || p?.submission?.journal_id
+          return String(issueJournalId || submissionJournalId) === String(jid)
+        })
+        .map((p: any) => p?.submission)
+        .filter(Boolean)
+
+      setArticles(filteredArticles as any)
     }
+
+    run()
   }, [journalPath])
 
   if (!mounted) {

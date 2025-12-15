@@ -1,238 +1,116 @@
-// app/api/reviews/[id]/route.ts
 import { NextRequest, NextResponse } from "next/server"
-import { authMiddleware, AuthRequest, requireRole } from "@/lib/auth/middleware"
-import { prisma } from "@/lib/prisma"
-import { z } from "zod"
+import { createClient } from "@/lib/supabase/server"
+import { requireAuth } from "@/lib/middleware/auth"
+import { logger } from "@/lib/utils/logger"
+import { transformFromDB } from "@/lib/utils/transform"
 
-const updateReviewSchema = z.object({
-  status: z.enum(["pending", "accepted", "declined", "completed"]).optional(),
-  recommendation: z.enum(["accept", "minor_revisions", "major_revisions", "resubmit_elsewhere", "decline"]).optional(),
-  comments: z.string().optional(),
-  commentsToEditor: z.string().optional(),
-  quality: z.number().int().min(1).max(5).optional(),
-  dateDue: z.string().datetime().optional(),
-})
+export async function GET(
+  request: NextRequest,
+  { params }: { params: { id: string } }
+) {
+  const startTime = Date.now()
 
-export const GET = authMiddleware(async (
-  req: AuthRequest,
-  { params }: { params: Promise<{ id: string }> }
-) => {
   try {
-    const { id } = await params
-
-    const assignment = await prisma.reviewAssignment.findUnique({
-      where: { id },
-      include: {
-        submission: {
-          include: {
-            journal: {
-              select: {
-                id: true,
-                name: true,
-              },
-            },
-            section: {
-              select: {
-                id: true,
-                title: true,
-              },
-            },
-            files: {
-              where: {
-                fileStage: "review",
-              },
-            },
-          },
-        },
-        reviewer: {
-          select: {
-            id: true,
-            firstName: true,
-            lastName: true,
-            email: true,
-            affiliation: true,
-          },
-        },
-        reviewRound: {
-          include: {
-            reviewAssignments: {
-              include: {
-                reviewer: {
-                  select: {
-                    id: true,
-                    firstName: true,
-                    lastName: true,
-                  },
-                },
-              },
-            },
-          },
-        },
-      },
-    })
-
-    if (!assignment) {
-      return NextResponse.json(
-        { error: "Review assignment not found" },
-        { status: 404 }
-      )
-    }
-
-    // Check access: reviewer (own assignment) or editor
-    const isReviewer = assignment.reviewerId === req.user?.userId
-    const isEditor = req.user?.roles.includes("editor") || req.user?.roles.includes("admin")
-
-    if (!isReviewer && !isEditor) {
-      return NextResponse.json(
-        { error: "Unauthorized" },
-        { status: 403 }
-      )
-    }
-
-    return NextResponse.json(assignment)
-  } catch (error: any) {
-    console.error("Get review error:", error)
-    return NextResponse.json(
-      { error: "Failed to fetch review assignment" },
-      { status: 500 }
-    )
-  }
-})
-
-export const PUT = authMiddleware(async (
-  req: AuthRequest,
-  { params }: { params: Promise<{ id: string }> }
-) => {
-  try {
-    const { id } = await params
-    const body = await req.json()
-    const data = updateReviewSchema.parse(body)
-
-    const assignment = await prisma.reviewAssignment.findUnique({
-      where: { id },
-      select: {
-        reviewerId: true,
-        status: true,
-        submission: {
-          select: {
-            journalId: true,
-          },
-        },
-      },
-    })
-
-    if (!assignment) {
-      return NextResponse.json(
-        { error: "Review assignment not found" },
-        { status: 404 }
-      )
-    }
-
     // Check authorization
-    const isReviewer = assignment.reviewerId === req.user?.userId
-    const isEditor = req.user?.roles.includes("editor") || req.user?.roles.includes("admin")
-
-    if (!isReviewer && !isEditor) {
-      return NextResponse.json(
-        { error: "Unauthorized" },
-        { status: 403 }
-      )
+    const { authorized, user, error: authError } = await requireAuth(request)
+    if (!authorized) {
+      logger.apiError('/api/reviews/[id]', 'GET', authError)
+      return NextResponse.json({ error: authError }, { status: 401 })
     }
 
-    // Build update data
-    const updateData: any = {}
+    logger.apiRequest('/api/reviews/[id]', 'GET', user?.id)
 
-    if (data.status) {
-      updateData.status = data.status
-      if (data.status === "accepted") {
-        updateData.dateConfirmed = new Date()
-      } else if (data.status === "completed") {
-        updateData.dateCompleted = new Date()
+    const supabase = await createClient()
+    const { data, error } = await supabase
+      .from("reviews")
+      .select(`*, reviewer:users!reviews_reviewer_id_fkey(*), submission:submissions(*)`)
+      .eq("id", params.id)
+      .single()
+
+    if (error) {
+      logger.apiError('/api/reviews/[id]', 'GET', error, user?.id)
+      return NextResponse.json({ error: error.message }, { status: 404 })
+    }
+
+    // Check if user has permission to view this review
+    const userRoles = user?.roles || []
+    if (!userRoles.includes('admin') && !userRoles.includes('editor')) {
+      // Reviewer can only see their own reviews
+      if (data.reviewer_id !== user?.id) {
+        logger.apiError('/api/reviews/[id]', 'GET', 'Forbidden - Cannot access other reviewer\'s review', user?.id)
+        return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
       }
     }
 
-    if (data.recommendation) updateData.recommendation = data.recommendation
-    if (data.comments !== undefined) updateData.comments = data.comments
-    if (data.commentsToEditor !== undefined) updateData.commentsToEditor = data.commentsToEditor
-    if (data.quality) updateData.quality = data.quality
-    if (data.dateDue) updateData.dateDue = new Date(data.dateDue)
+    const duration = Date.now() - startTime
+    logger.apiResponse('/api/reviews/[id]', 'GET', 200, duration, user?.id)
 
-    // Only reviewers can submit reviews (change to completed)
-    if (data.status === "completed" && !isReviewer) {
-      return NextResponse.json(
-        { error: "Only reviewers can complete their reviews" },
-        { status: 403 }
-      )
-    }
-
-    const updated = await prisma.reviewAssignment.update({
-      where: { id },
-      data: updateData,
-      include: {
-        submission: {
-          select: {
-            id: true,
-            title: true,
-          },
-        },
-        reviewer: {
-          select: {
-            id: true,
-            firstName: true,
-            lastName: true,
-            email: true,
-          },
-        },
-        reviewRound: true,
-      },
-    })
-
-    return NextResponse.json(updated)
+    const transformed = transformFromDB(data)
+    return NextResponse.json(transformed)
   } catch (error: any) {
-    if (error instanceof z.ZodError) {
-      return NextResponse.json(
-        { error: "Invalid input", details: error.errors },
-        { status: 400 }
-      )
-    }
-
-    console.error("Update review error:", error)
-    return NextResponse.json(
-      { error: "Failed to update review assignment" },
-      { status: 500 }
-    )
+    logger.apiError('/api/reviews/[id]', 'GET', error)
+    return NextResponse.json({ error: "Internal server error" }, { status: 500 })
   }
-})
+}
 
-export const DELETE = requireRole(["editor", "admin"])(async (
-  req: AuthRequest,
-  { params }: { params: Promise<{ id: string }> }
-) => {
+export async function PATCH(
+  request: NextRequest,
+  { params }: { params: { id: string } }
+) {
+  const startTime = Date.now()
+
   try {
-    const { id } = await params
-
-    const assignment = await prisma.reviewAssignment.findUnique({
-      where: { id },
-    })
-
-    if (!assignment) {
-      return NextResponse.json(
-        { error: "Review assignment not found" },
-        { status: 404 }
-      )
+    // Check authorization
+    const { authorized, user, error: authError } = await requireAuth(request)
+    if (!authorized) {
+      logger.apiError('/api/reviews/[id]', 'PATCH', authError)
+      return NextResponse.json({ error: authError }, { status: 401 })
     }
 
-    await prisma.reviewAssignment.delete({
-      where: { id },
-    })
+    logger.apiRequest('/api/reviews/[id]', 'PATCH', user?.id)
 
-    return NextResponse.json({ message: "Review assignment deleted successfully" })
+    const supabase = await createClient()
+
+    // Check if review exists and user has permission
+    const { data: existingReview } = await supabase
+      .from("reviews")
+      .select("reviewer_id")
+      .eq("id", params.id)
+      .single()
+
+    if (!existingReview) {
+      return NextResponse.json({ error: "Review not found" }, { status: 404 })
+    }
+
+    // Check permission: reviewer can update their own, editor/admin can update any
+    const userRoles = user?.roles || []
+    if (!userRoles.includes('admin') && !userRoles.includes('editor')) {
+      if (existingReview.reviewer_id !== user?.id) {
+        logger.apiError('/api/reviews/[id]', 'PATCH', 'Forbidden - Cannot update other reviewer\'s review', user?.id)
+        return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
+      }
+    }
+
+    const body = await request.json()
+    const { data, error } = await supabase
+      .from("reviews")
+      .update(body)
+      .eq("id", params.id)
+      .select()
+      .single()
+
+    if (error) {
+      logger.apiError('/api/reviews/[id]', 'PATCH', error, user?.id)
+      return NextResponse.json({ error: error.message }, { status: 500 })
+    }
+
+    const duration = Date.now() - startTime
+    logger.apiResponse('/api/reviews/[id]', 'PATCH', 200, duration, user?.id)
+
+    const transformed = transformFromDB(data)
+    return NextResponse.json(transformed)
   } catch (error: any) {
-    console.error("Delete review error:", error)
-    return NextResponse.json(
-      { error: "Failed to delete review assignment" },
-      { status: 500 }
-    )
+    logger.apiError('/api/reviews/[id]', 'PATCH', error)
+    return NextResponse.json({ error: "Internal server error" }, { status: 500 })
   }
-})
-
+}

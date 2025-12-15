@@ -1,4 +1,4 @@
-import { createRouteHandlerClient } from '@/lib/supabase/server';
+import { createClient } from '@/lib/supabase/server';
 import { NextResponse } from 'next/server';
 import { ReviewFormService } from '@/lib/services/review-form.service';
 import { getContextId } from '@/lib/utils/context';
@@ -6,7 +6,7 @@ import { getContextId } from '@/lib/utils/context';
 export const dynamic = 'force-dynamic';
 
 export async function GET(request: Request) {
-    const supabase = await createRouteHandlerClient();
+    const supabase = await createClient();
     const contextId = await getContextId();
     const service = new ReviewFormService(supabase);
 
@@ -15,7 +15,7 @@ export async function GET(request: Request) {
 }
 
 export async function POST(request: Request) {
-    const supabase = await createRouteHandlerClient();
+    const supabase = await createClient();
     const contextId = await getContextId();
     const service = new ReviewFormService(supabase);
     const json = await request.json();

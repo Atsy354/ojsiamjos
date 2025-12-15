@@ -1,36 +1,58 @@
-import { createRouteHandlerClient } from '@/lib/supabase/server';
-import { NextResponse } from 'next/server';
-import { NotificationManager } from '@/lib/notifications/notification-manager';
-import { getContextId } from '@/lib/utils/context';
+import { NextRequest, NextResponse } from "next/server"
+import { createClient } from "@/lib/supabase/server"
 
-export const dynamic = 'force-dynamic';
+export async function POST(request: NextRequest) {
+    try {
+        const body = await request.json()
+        const supabase = await createClient()
 
-// GET: Fetch unread notifications
-export async function GET(request: Request) {
-    const supabase = await createRouteHandlerClient();
-    const { data: session } = await supabase.auth.getSession();
+        // Get verified user from Supabase Auth (do not trust session user from cookies/storage)
+        const { data: { user: authUser }, error: authUserError } = await supabase.auth.getUser()
+        if (authUserError || !authUser) {
+            return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
+        }
 
-    if (!session.session) {
-        return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+        const { message, type, relatedId } = body
+
+        const { data, error } = await supabase
+            .from("notifications")
+            .insert({
+                user_id: authUser.id,
+                message,
+                type: type || "info",
+                related_id: relatedId,
+                is_read: false,
+                created_at: new Date().toISOString(),
+            })
+            .select()
+            .single()
+
+        if (error) return NextResponse.json({ error: error.message }, { status: 500 })
+        return NextResponse.json(data, { status: 201 })
+    } catch (error) {
+        return NextResponse.json({ error: "Internal server error" }, { status: 500 })
     }
-
-    const contextId = await getContextId();
-    const manager = new NotificationManager(supabase);
-
-    const notifications = await manager.getUnreadNotifications(session.session.user.id, contextId);
-
-    return NextResponse.json(notifications);
 }
 
-// PUT: Mark as read
-export async function PUT(request: Request) {
-    const supabase = await createRouteHandlerClient();
-    const { notification_id } = await request.json();
+export async function GET(request: NextRequest) {
+    try {
+        const supabase = await createClient()
+        const { data: { user: authUser }, error: authUserError } = await supabase.auth.getUser()
 
-    if (!notification_id) return NextResponse.json({ error: 'ID required' }, { status: 400 });
+        if (authUserError || !authUser) {
+            return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
+        }
 
-    const manager = new NotificationManager(supabase);
-    await manager.markAsRead(notification_id);
+        const { data, error } = await supabase
+            .from("notifications")
+            .select("*")
+            .eq("user_id", authUser.id)
+            .order("created_at", { ascending: false })
+            .limit(50)
 
-    return NextResponse.json({ success: true });
+        if (error) return NextResponse.json({ error: error.message }, { status: 500 })
+        return NextResponse.json(data)
+    } catch (error) {
+        return NextResponse.json({ error: "Internal server error" }, { status: 500 })
+    }
 }

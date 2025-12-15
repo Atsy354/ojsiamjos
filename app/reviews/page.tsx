@@ -2,332 +2,268 @@
 
 import { useEffect, useState } from "react"
 import { DashboardLayout } from "@/components/layout/dashboard-layout"
-import { useAuth } from "@/lib/hooks/use-auth"
-import { useReviewsAPI } from "@/lib/hooks/use-reviews-api"
-import { apiGet } from "@/lib/api/client"
-import { initializeStorage } from "@/lib/storage"
-import { toast } from "sonner"
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
-import { Badge } from "@/components/ui/badge"
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
-import { Avatar, AvatarFallback } from "@/components/ui/avatar"
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog"
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
-import { Textarea } from "@/components/ui/textarea"
-import { Label } from "@/components/ui/label"
-import { Clock, CheckCircle, XCircle, FileText, Calendar, Eye } from "lucide-react"
-import { formatDistanceToNow, format } from "date-fns"
+import { Badge } from "@/components/ui/badge"
+import { Alert, AlertDescription } from "@/components/ui/alert"
+import { CheckCircle, XCircle, Clock, FileText, Calendar, Loader2 } from "lucide-react"
+import { apiGet, apiPatch } from "@/lib/api/client"
+import { useToast } from "@/hooks/use-toast"
+import { useAuth } from "@/lib/hooks/use-auth"
+import { formatDistanceToNow } from "date-fns"
 import Link from "next/link"
-import type { ReviewAssignment, Submission, ReviewRecommendation } from "@/lib/types"
 
-export default function ReviewsPage() {
-  const { user, isEditor, isReviewer } = useAuth()
-  const { assignments, acceptReview, declineReview, submitReview, isLoading, refetch } = useReviewsAPI(
-    isReviewer ? user?.id : undefined,
-  )
-  const [mounted, setMounted] = useState(false)
-  const [submissions, setSubmissions] = useState<Record<string, Submission>>({})
-  const [reviewDialog, setReviewDialog] = useState<ReviewAssignment | null>(null)
-  const [recommendation, setRecommendation] = useState<ReviewRecommendation | "">("")
-  const [comments, setComments] = useState("")
-  const [commentsToEditor, setCommentsToEditor] = useState("")
+export default function ReviewerDashboardPage() {
+  const { user } = useAuth()
+  const { toast } = useToast()
+  const [assignments, setAssignments] = useState<any[]>([])
+  const [isLoading, setIsLoading] = useState(true)
+  const [respondingTo, setRespondingTo] = useState<number | null>(null)
+
+  const parseSupabaseTs = (value: any) => {
+    if (!value) return null
+    const s = String(value)
+    // Convert "YYYY-MM-DD HH:mm:ss+00" -> "YYYY-MM-DDTHH:mm:ss+00" so Date() parses reliably.
+    return new Date(s.includes('T') ? s : s.replace(' ', 'T'))
+  }
 
   useEffect(() => {
-    initializeStorage()
-    setMounted(true)
-
-    // Load submissions for review assignments from API
-    const loadSubmissions = async () => {
-      try {
-        const subs = await apiGet<Submission[]>("/api/submissions")
-        const subMap: Record<string, Submission> = {}
-        subs.forEach((s) => {
-          subMap[s.id] = s
-        })
-        setSubmissions(subMap)
-      } catch (err) {
-        console.error("Failed to load submissions:", err)
-      }
-    }
-    
-    loadSubmissions()
+    fetchAssignments()
   }, [])
 
-  if (!mounted || isLoading) {
+  const fetchAssignments = async () => {
+    setIsLoading(true)
+    try {
+      const response = await apiGet('/api/reviews')
+      setAssignments(Array.isArray(response) ? response : [])
+    } catch (error: any) {
+      toast({
+        title: "Error",
+        description: error.message || "Failed to load review assignments",
+        variant: "destructive"
+      })
+    } finally {
+      setIsLoading(false)
+    }
+  }
+
+  const handleResponse = async (assignmentId: number, declined: boolean) => {
+    setRespondingTo(assignmentId)
+    try {
+      await apiPatch(`/api/reviews/${assignmentId}/respond`, { declined })
+
+      toast({
+        title: "Success",
+        description: declined ? "Review invitation declined" : "Review invitation accepted"
+      })
+
+      fetchAssignments()
+    } catch (error: any) {
+      toast({
+        title: "Error",
+        description: error.message,
+        variant: "destructive"
+      })
+    } finally {
+      setRespondingTo(null)
+    }
+  }
+
+  const getStatusBadge = (assignment: any) => {
+    if (assignment.declined) {
+      return <Badge variant="destructive">Declined</Badge>
+    }
+    if (assignment.dateCompleted) {
+      return <Badge className="bg-green-600">Completed</Badge>
+    }
+    if (assignment.dateConfirmed) {
+      return <Badge className="bg-blue-600">In Progress</Badge>
+    }
+    return <Badge variant="outline">Pending Response</Badge>
+  }
+
+  const pendingInvitations = assignments.filter(a => !a.dateConfirmed && !a.declined)
+  const activeReviews = assignments.filter(a => a.dateConfirmed && !a.dateCompleted && !a.declined)
+  const completedReviews = assignments.filter(a => a.dateCompleted)
+
+  if (isLoading) {
     return (
-      <DashboardLayout title="Review Queue" subtitle="Manage peer reviews">
+      <DashboardLayout title="My Reviews" subtitle="Manage your review assignments">
         <div className="flex items-center justify-center py-12">
-          <div className="h-8 w-8 animate-spin rounded-full border-4 border-primary border-t-transparent" />
+          <Loader2 className="h-8 w-8 animate-spin" />
         </div>
       </DashboardLayout>
     )
   }
 
-  const pendingAssignments = assignments.filter((a) => a.status === "pending")
-  const activeAssignments = assignments.filter((a) => a.status === "accepted")
-  const completedAssignments = assignments.filter((a) => a.status === "completed")
-
-  const handleAccept = async (id: string) => {
-    try {
-      await acceptReview(id)
-      toast.success("Review accepted")
-      refetch()
-    } catch (error: any) {
-      toast.error(error.message || "Failed to accept review")
-    }
-  }
-
-  const handleDecline = async (id: string) => {
-    try {
-      await declineReview(id)
-      toast.success("Review declined")
-      refetch()
-    } catch (error: any) {
-      toast.error(error.message || "Failed to decline review")
-    }
-  }
-
-  const handleSubmitReview = async () => {
-    if (!reviewDialog || !recommendation) return
-    try {
-      await submitReview(reviewDialog.id, recommendation, comments, commentsToEditor)
-      toast.success("Review submitted successfully")
-      setReviewDialog(null)
-      setRecommendation("")
-      setComments("")
-      setCommentsToEditor("")
-      refetch()
-    } catch (error: any) {
-      toast.error(error.message || "Failed to submit review")
-    }
-  }
-
-  const ReviewCard = ({ assignment }: { assignment: ReviewAssignment }) => {
-    const submission = submissions[assignment.submissionId]
-    const reviewer = assignment.reviewer || { firstName: "Unknown", lastName: "Reviewer", email: "" }
-
-    if (!submission) return null
-
-    return (
-      <Card>
-        <CardHeader className="pb-3">
-          <div className="flex items-start justify-between">
-            <div className="space-y-1">
-              <Badge
-                variant={
-                  assignment.status === "completed"
-                    ? "default"
-                    : assignment.status === "accepted"
-                      ? "secondary"
-                      : assignment.status === "declined"
-                        ? "destructive"
-                        : "outline"
-                }
-                className={assignment.status === "completed" ? "bg-success text-success-foreground" : undefined}
-              >
-                {assignment.status}
-              </Badge>
-              <CardTitle className="text-base line-clamp-2">{submission.title}</CardTitle>
-            </div>
-          </div>
-        </CardHeader>
-        <CardContent className="space-y-4">
-          <p className="text-sm text-muted-foreground line-clamp-2">{submission.abstract}</p>
-
-          {isEditor && reviewer && (
-            <div className="flex items-center gap-2">
-              <Avatar className="h-6 w-6">
-                <AvatarFallback className="text-xs">
-                  {reviewer.firstName[0]}
-                  {reviewer.lastName[0]}
-                </AvatarFallback>
-              </Avatar>
-              <span className="text-sm text-muted-foreground">
-                {reviewer.firstName} {reviewer.lastName}
-              </span>
-            </div>
-          )}
-
-          <div className="flex items-center justify-between text-xs text-muted-foreground">
-            <span className="flex items-center gap-1">
-              <Calendar className="h-3.5 w-3.5" />
-              Assigned {formatDistanceToNow(new Date(assignment.dateAssigned), { addSuffix: true })}
-            </span>
-            {assignment.dateDue && (
-              <span className="flex items-center gap-1">
-                <Clock className="h-3.5 w-3.5" />
-                Due {format(new Date(assignment.dateDue), "MMM d")}
-              </span>
-            )}
-          </div>
-
-          {assignment.status === "completed" && assignment.recommendation && (
-            <div className="rounded-lg bg-muted p-3">
-              <p className="text-xs font-medium text-muted-foreground mb-1">Recommendation</p>
-              <p className="text-sm font-medium capitalize">{assignment.recommendation.replace(/_/g, " ")}</p>
-              {assignment.comments && (
-                <p className="text-sm text-muted-foreground mt-2 line-clamp-2">{assignment.comments}</p>
-              )}
-            </div>
-          )}
-
-          {/* Actions */}
-          <div className="flex items-center gap-2 pt-2">
-            {assignment.status === "pending" && isReviewer && (
-              <>
-                <Button size="sm" onClick={() => handleAccept(assignment.id)}>
-                  <CheckCircle className="mr-2 h-4 w-4" />
-                  Accept
-                </Button>
-                <Button size="sm" variant="outline" onClick={() => handleDecline(assignment.id)}>
-                  <XCircle className="mr-2 h-4 w-4" />
-                  Decline
-                </Button>
-              </>
-            )}
-
-            {assignment.status === "accepted" && isReviewer && (
-              <Button size="sm" onClick={() => setReviewDialog(assignment)}>
-                <FileText className="mr-2 h-4 w-4" />
-                Submit Review
-              </Button>
-            )}
-
-            <Button size="sm" variant="ghost" asChild>
-              <Link href={`/submissions/${assignment.submissionId}`}>
-                <Eye className="mr-2 h-4 w-4" />
-                View
-              </Link>
-            </Button>
-          </div>
-        </CardContent>
-      </Card>
-    )
-  }
-
   return (
-    <DashboardLayout title="Review Queue" subtitle="Manage peer reviews">
-      <Tabs defaultValue="pending" className="space-y-4">
-        <TabsList>
-          <TabsTrigger value="pending">Pending ({pendingAssignments.length})</TabsTrigger>
-          <TabsTrigger value="active">Active ({activeAssignments.length})</TabsTrigger>
-          <TabsTrigger value="completed">Completed ({completedAssignments.length})</TabsTrigger>
-        </TabsList>
+    <DashboardLayout title="My Reviews" subtitle="Manage your review assignments">
+      <div className="space-y-6">
+        {/* Stats */}
+        <div className="grid gap-4 md:grid-cols-3">
+          <Card>
+            <CardHeader className="flex flex-row items-center justify-between pb-2">
+              <CardTitle className="text-sm font-medium">Pending Invitations</CardTitle>
+              <Clock className="h-4 w-4 text-muted-foreground" />
+            </CardHeader>
+            <CardContent>
+              <div className="text-2xl font-bold">{pendingInvitations.length}</div>
+              <p className="text-xs text-muted-foreground">Awaiting your response</p>
+            </CardContent>
+          </Card>
 
-        <TabsContent value="pending">
-          {pendingAssignments.length === 0 ? (
-            <Card>
-              <CardContent className="flex flex-col items-center justify-center py-12">
-                <Clock className="mb-2 h-8 w-8 text-muted-foreground" />
-                <p className="text-muted-foreground">No pending review requests</p>
-              </CardContent>
-            </Card>
-          ) : (
-            <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-              {pendingAssignments.map((assignment) => (
-                <ReviewCard key={assignment.id} assignment={assignment} />
+          <Card>
+            <CardHeader className="flex flex-row items-center justify-between pb-2">
+              <CardTitle className="text-sm font-medium">Active Reviews</CardTitle>
+              <FileText className="h-4 w-4 text-muted-foreground" />
+            </CardHeader>
+            <CardContent>
+              <div className="text-2xl font-bold">{activeReviews.length}</div>
+              <p className="text-xs text-muted-foreground">In progress</p>
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardHeader className="flex flex-row items-center justify-between pb-2">
+              <CardTitle className="text-sm font-medium">Completed</CardTitle>
+              <CheckCircle className="h-4 w-4 text-muted-foreground" />
+            </CardHeader>
+            <CardContent>
+              <div className="text-2xl font-bold">{completedReviews.length}</div>
+              <p className="text-xs text-muted-foreground">Reviews submitted</p>
+            </CardContent>
+          </Card>
+        </div>
+
+        {/* Pending Invitations */}
+        {pendingInvitations.length > 0 && (
+          <Card>
+            <CardHeader>
+              <CardTitle>Pending Invitations</CardTitle>
+              <CardDescription>Review invitations awaiting your response</CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              {pendingInvitations.map((assignment) => (
+                <div key={assignment.id} className="border rounded-lg p-4 space-y-3">
+                  <div className="flex items-start justify-between">
+                    <div className="flex-1">
+                      <h3 className="font-semibold">{assignment.submission?.title || 'Untitled Submission'}</h3>
+                      <div className="flex items-center gap-4 mt-2 text-sm text-muted-foreground">
+                        <span className="flex items-center gap-1">
+                          <FileText className="h-3 w-3" />
+                          Submission #{assignment.submissionId}
+                        </span>
+                        {assignment.dateDue && (
+                          <span className="flex items-center gap-1">
+                            <Calendar className="h-3 w-3" />
+                            Due {formatDistanceToNow(parseSupabaseTs(assignment.dateDue) as Date, { addSuffix: true })}
+                          </span>
+                        )}
+                      </div>
+                    </div>
+                    {getStatusBadge(assignment)}
+                  </div>
+
+                  <div className="flex gap-2">
+                    <Button
+                      onClick={() => handleResponse(assignment.id, false)}
+                      disabled={respondingTo === assignment.id}
+                      className="flex-1"
+                    >
+                      {respondingTo === assignment.id ? (
+                        <><Loader2 className="mr-2 h-4 w-4 animate-spin" />Processing...</>
+                      ) : (
+                        <><CheckCircle className="mr-2 h-4 w-4" />Accept Review</>
+                      )}
+                    </Button>
+                    <Button
+                      variant="outline"
+                      onClick={() => handleResponse(assignment.id, true)}
+                      disabled={respondingTo === assignment.id}
+                      className="flex-1"
+                    >
+                      <XCircle className="mr-2 h-4 w-4" />
+                      Decline
+                    </Button>
+                  </div>
+                </div>
               ))}
-            </div>
-          )}
-        </TabsContent>
+            </CardContent>
+          </Card>
+        )}
 
-        <TabsContent value="active">
-          {activeAssignments.length === 0 ? (
-            <Card>
-              <CardContent className="flex flex-col items-center justify-center py-12">
-                <FileText className="mb-2 h-8 w-8 text-muted-foreground" />
-                <p className="text-muted-foreground">No active reviews</p>
-              </CardContent>
-            </Card>
-          ) : (
-            <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-              {activeAssignments.map((assignment) => (
-                <ReviewCard key={assignment.id} assignment={assignment} />
+        {/* Active Reviews */}
+        {activeReviews.length > 0 && (
+          <Card>
+            <CardHeader>
+              <CardTitle>Active Reviews</CardTitle>
+              <CardDescription>Reviews in progress</CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              {activeReviews.map((assignment) => (
+                <div key={assignment.id} className="border rounded-lg p-4 space-y-3">
+                  <div className="flex items-start justify-between">
+                    <div className="flex-1">
+                      <h3 className="font-semibold">{assignment.submission?.title || 'Untitled Submission'}</h3>
+                      <div className="flex items-center gap-4 mt-2 text-sm text-muted-foreground">
+                        <span>Submission #{assignment.submissionId}</span>
+                        {assignment.dateDue && (
+                          <span className="flex items-center gap-1">
+                            <Calendar className="h-3 w-3" />
+                            Due {formatDistanceToNow(parseSupabaseTs(assignment.dateDue) as Date, { addSuffix: true })}
+                          </span>
+                        )}
+                      </div>
+                    </div>
+                    {getStatusBadge(assignment)}
+                  </div>
+
+                  <Button asChild className="w-full">
+                    <Link href={`/reviews/${assignment.id}/submit`}>
+                      <FileText className="mr-2 h-4 w-4" />
+                      Submit Review
+                    </Link>
+                  </Button>
+                </div>
               ))}
-            </div>
-          )}
-        </TabsContent>
+            </CardContent>
+          </Card>
+        )}
 
-        <TabsContent value="completed">
-          {completedAssignments.length === 0 ? (
-            <Card>
-              <CardContent className="flex flex-col items-center justify-center py-12">
-                <CheckCircle className="mb-2 h-8 w-8 text-muted-foreground" />
-                <p className="text-muted-foreground">No completed reviews</p>
-              </CardContent>
-            </Card>
-          ) : (
-            <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-              {completedAssignments.map((assignment) => (
-                <ReviewCard key={assignment.id} assignment={assignment} />
+        {/* Completed Reviews */}
+        {completedReviews.length > 0 && (
+          <Card>
+            <CardHeader>
+              <CardTitle>Completed Reviews</CardTitle>
+              <CardDescription>Your submitted reviews</CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-3">
+              {completedReviews.map((assignment) => (
+                <div key={assignment.id} className="border rounded-lg p-3 flex items-center justify-between">
+                  <div className="flex-1">
+                    <h4 className="font-medium">{assignment.submission?.title || 'Untitled'}</h4>
+                    <p className="text-sm text-muted-foreground">
+                      Completed {formatDistanceToNow(parseSupabaseTs(assignment.dateCompleted) as Date, { addSuffix: true })}
+                    </p>
+                  </div>
+                  {getStatusBadge(assignment)}
+                </div>
               ))}
-            </div>
-          )}
-        </TabsContent>
-      </Tabs>
+            </CardContent>
+          </Card>
+        )}
 
-      {/* Submit Review Dialog */}
-      <Dialog open={!!reviewDialog} onOpenChange={() => setReviewDialog(null)}>
-        <DialogContent className="max-w-2xl">
-          <DialogHeader>
-            <DialogTitle>Submit Review</DialogTitle>
-            <DialogDescription>{reviewDialog && submissions[reviewDialog.submissionId]?.title}</DialogDescription>
-          </DialogHeader>
-          <div className="space-y-4 py-4">
-            <div className="space-y-2">
-              <Label>Recommendation *</Label>
-              <Select value={recommendation} onValueChange={(v) => setRecommendation(v as ReviewRecommendation)}>
-                <SelectTrigger>
-                  <SelectValue placeholder="Select your recommendation" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="accept">Accept Submission</SelectItem>
-                  <SelectItem value="minor_revisions">Minor Revisions Required</SelectItem>
-                  <SelectItem value="major_revisions">Major Revisions Required</SelectItem>
-                  <SelectItem value="resubmit_elsewhere">Resubmit Elsewhere</SelectItem>
-                  <SelectItem value="decline">Decline Submission</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-
-            <div className="space-y-2">
-              <Label>Comments to Author *</Label>
-              <Textarea
-                value={comments}
-                onChange={(e) => setComments(e.target.value)}
-                placeholder="Enter your review comments for the author..."
-                rows={6}
-              />
-            </div>
-
-            <div className="space-y-2">
-              <Label>Confidential Comments to Editor</Label>
-              <Textarea
-                value={commentsToEditor}
-                onChange={(e) => setCommentsToEditor(e.target.value)}
-                placeholder="Enter any confidential comments for the editor..."
-                rows={3}
-              />
-            </div>
-          </div>
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setReviewDialog(null)}>
-              Cancel
-            </Button>
-            <Button onClick={handleSubmitReview} disabled={!recommendation || !comments}>
-              Submit Review
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+        {/* Empty State */}
+        {assignments.length === 0 && (
+          <Alert>
+            <FileText className="h-4 w-4" />
+            <AlertDescription>
+              You don't have any review assignments yet. When editors assign you to review submissions,
+              they will appear here.
+            </AlertDescription>
+          </Alert>
+        )}
+      </div>
     </DashboardLayout>
   )
 }

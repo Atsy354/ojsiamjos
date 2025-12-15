@@ -14,17 +14,22 @@ export async function getContextId(): Promise<number> {
     const path = headersList.get('x-journal-path');
 
     if (path) {
-        // We need a DB call here. 
-        // Note: Creating a supabase client here might ideally be cached or pass-through.
+        // We need a DB call here.
+        // Try to support both schemas:
+        // - journals.journal_id (legacy)
+        // - journals.id (common)
         try {
             const supabase = await createClient();
             const { data } = await supabase
                 .from('journals')
-                .select('journal_id')
+                .select('journal_id, id')
                 .eq('path', path)
                 .single();
 
-            if (data) return data.journal_id;
+            if (data) {
+                // Prefer journal_id if exists; fallback to id
+                return (data as any).journal_id ?? (data as any).id;
+            }
         } catch (e) {
             console.error("Context resolution failed", e);
         }

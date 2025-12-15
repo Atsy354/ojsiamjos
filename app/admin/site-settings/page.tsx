@@ -278,9 +278,9 @@ export default function SiteSettingsPage() {
     const currentItems = [...getCurrentMenu()]
     const index = currentItems.findIndex((item) => item.id === id)
     if (direction === "up" && index > 0) {
-      ;[currentItems[index], currentItems[index - 1]] = [currentItems[index - 1], currentItems[index]]
+      [currentItems[index], currentItems[index - 1]] = [currentItems[index - 1], currentItems[index]]
     } else if (direction === "down" && index < currentItems.length - 1) {
-      ;[currentItems[index], currentItems[index + 1]] = [currentItems[index + 1], currentItems[index]]
+      [currentItems[index], currentItems[index + 1]] = [currentItems[index + 1], currentItems[index]]
     }
     setCurrentMenu(currentItems.map((item, i) => ({ ...item, order: i + 1 })))
   }

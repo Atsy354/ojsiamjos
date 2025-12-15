@@ -43,16 +43,16 @@ export async function hasRole(request: NextRequest, roleId: number): Promise<boo
         }
     );
 
-    const { data: { session } } = await supabase.auth.getSession();
+    const { data: { user: authUser }, error: authUserError } = await supabase.auth.getUser();
 
-    if (!session) {
+    if (authUserError || !authUser) {
         return false;
     }
 
     const { data: userGroups } = await supabase
         .from('user_user_groups')
         .select('role_id')
-        .eq('user_id', session.user.id);
+        .eq('user_id', authUser.id);
 
     return userGroups?.some(ug => ug.role_id === roleId) || false;
 }
@@ -96,16 +96,16 @@ export async function hasAnyRole(request: NextRequest, roleIds: number[]): Promi
         }
     );
 
-    const { data: { session } } = await supabase.auth.getSession();
+    const { data: { user: authUser }, error: authUserError } = await supabase.auth.getUser();
 
-    if (!session) {
+    if (authUserError || !authUser) {
         return false;
     }
 
     const { data: userGroups } = await supabase
         .from('user_user_groups')
         .select('role_id')
-        .eq('user_id', session.user.id);
+        .eq('user_id', authUser.id);
 
     return userGroups?.some(ug => roleIds.includes(ug.role_id)) || false;
 }

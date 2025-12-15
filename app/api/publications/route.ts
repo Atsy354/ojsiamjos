@@ -1,217 +1,100 @@
-// app/api/publications/route.ts
 import { NextRequest, NextResponse } from "next/server"
-import { authMiddleware, AuthRequest, requireRole } from "@/lib/auth/middleware"
-import { prisma } from "@/lib/prisma"
-import { z } from "zod"
+import { createClient } from "@/lib/supabase/server"
+import { transformFromDB } from "@/lib/utils/transform"
 
-const createPublicationSchema = z.object({
-  submissionId: z.string().min(1, "Submission ID is required"),
-  issueId: z.string().optional(),
-  pages: z.string().optional(),
-  doi: z.string().optional(),
-  datePublished: z.string().datetime().optional(),
-  licenseUrl: z.string().optional(),
-  status: z.enum(["draft", "scheduled", "published"]).default("draft"),
-})
-
-export const GET = authMiddleware(async (req: AuthRequest) => {
+// GET /api/publications - List publications
+export async function GET(request: NextRequest) {
   try {
-    const { searchParams } = new URL(req.url)
-    const journalId = searchParams.get("journalId")
-    const issueId = searchParams.get("issueId")
+    const supabase = await createClient()
+    const { searchParams } = new URL(request.url)
     const status = searchParams.get("status")
 
-    const where: any = {
-      submission: journalId ? { journalId } : undefined,
+    // Try publications table first
+    let publications: any[] = []
+    const { data: pubData, error: pubError } = await supabase
+      .from("publications")
+      .select(`
+        *,
+        submission:submissions(id, title, status),
+        issue:issues(id, volume, number, year)
+      `)
+      .order("date_published", { ascending: false })
+
+    if (!pubError && pubData && pubData.length > 0) {
+      publications = pubData
+    } else {
+      // Fallback: Query submissions with status = 'published' or STATUS_PUBLISHED (3)
+      const { data: submissionsData } = await supabase
+        .from("submissions")
+        .select("id, title, status, updated_at, journal_id")
+        .or("status.eq.published,status.eq.3")
+        .order("updated_at", { ascending: false })
+
+      if (submissionsData && submissionsData.length > 0) {
+        // Map submissions to publication-like objects
+        publications = submissionsData.map((s: any) => ({
+          id: s.id,
+          submission_id: s.id,
+          status: "published",
+          date_published: s.updated_at,
+          submission: { id: s.id, title: s.title, status: s.status },
+        }))
+      }
     }
 
-    if (issueId) where.issueId = issueId
-    if (status) where.status = status
+    if (status) {
+      publications = publications.filter((p: any) => p.status === status)
+    }
 
-    // Remove undefined fields
-    Object.keys(where).forEach(key => where[key] === undefined && delete where[key])
+    const transformed: any[] = transformFromDB(publications || []) as any[]
 
-    const publications = await prisma.publication.findMany({
-      where,
-      include: {
-        submission: {
-          select: {
-            id: true,
-            title: true,
-            abstract: true,
-            keywords: true,
-            journal: {
-              select: {
-                id: true,
-                name: true,
-                path: true,
-              },
-            },
-            submitter: {
-              select: {
-                id: true,
-                firstName: true,
-                lastName: true,
-              },
-            },
-            authors: true,
-          },
-        },
-        issue: {
-          select: {
-            id: true,
-            volume: true,
-            number: true,
-            year: true,
-            title: true,
-          },
-        },
-      },
-      orderBy: {
-        datePublished: "desc",
-      },
+    // Attach production galleys from submission_files
+    const submissionIds: number[] = (transformed || [])
+      .map((p: any) => p?.submissionId ?? p?.submission_id ?? p?.submission?.id)
+      .map((v: any) => (typeof v === "string" ? parseInt(v, 10) : v))
+      .filter((v: any) => Number.isFinite(v))
+
+    if (submissionIds.length === 0) {
+      return NextResponse.json(transformed)
+    }
+
+    // file_stage 10 = production/galley files
+    const { data: files } = await supabase
+      .from("submission_files")
+      .select("file_id, submission_id, file_path, file_name, original_file_name, file_stage, date_uploaded")
+      .in("submission_id", submissionIds)
+      .eq("file_stage", 10)
+      .order("date_uploaded", { ascending: false })
+
+    const bySubmissionId = new Map<number, any[]>()
+    for (const f of files || []) {
+      const sid = (f as any).submission_id
+      if (!Number.isFinite(sid)) continue
+      const arr = bySubmissionId.get(sid) || []
+      arr.push({
+        id: (f as any).file_id ?? (f as any).id,
+        label: ((f as any).original_file_name || (f as any).file_name || "PDF").toLowerCase().includes("pdf") ? "PDF" : "GALLEY",
+        filePath: (f as any).file_path,
+        fileName: (f as any).original_file_name || (f as any).file_name,
+      })
+      bySubmissionId.set(sid, arr)
+    }
+
+    const enriched: any[] = (transformed || []).map((p: any) => {
+      const sidRaw = p?.submissionId ?? p?.submission_id ?? p?.submission?.id
+      const sid = typeof sidRaw === "string" ? parseInt(sidRaw, 10) : sidRaw
+      return {
+        ...p,
+        galleys: Number.isFinite(sid) ? (bySubmissionId.get(sid) || []) : [],
+      }
     })
 
-    return NextResponse.json(publications)
-  } catch (error: any) {
+    return NextResponse.json(enriched)
+  } catch (error) {
     console.error("Get publications error:", error)
     return NextResponse.json(
-      { error: "Failed to fetch publications" },
+      { error: "Internal server error" },
       { status: 500 }
     )
   }
-})
-
-export const POST = requireRole(["admin", "editor"])(async (req: AuthRequest) => {
-  try {
-    const body = await req.json()
-    const data = createPublicationSchema.parse(body)
-
-    // Verify submission exists and is accepted
-    const submission = await prisma.submission.findUnique({
-      where: { id: data.submissionId },
-      select: {
-        id: true,
-        title: true,
-        abstract: true,
-        keywords: true,
-        status: true,
-        journalId: true,
-      },
-    })
-
-    if (!submission) {
-      return NextResponse.json(
-        { error: "Submission not found" },
-        { status: 404 }
-      )
-    }
-
-    if (submission.status !== "accepted" && submission.status !== "scheduled") {
-      return NextResponse.json(
-        { error: "Only accepted or scheduled submissions can be published" },
-        { status: 400 }
-      )
-    }
-
-    // Check if publication already exists
-    const existingPublication = await prisma.publication.findUnique({
-      where: { submissionId: data.submissionId },
-    })
-
-    if (existingPublication) {
-      return NextResponse.json(
-        { error: "Publication for this submission already exists" },
-        { status: 400 }
-      )
-    }
-
-    // Verify issue if provided
-    if (data.issueId) {
-      const issue = await prisma.issue.findUnique({
-        where: { id: data.issueId },
-      })
-
-      if (!issue || issue.journalId !== submission.journalId) {
-        return NextResponse.json(
-          { error: "Issue not found or does not belong to the same journal" },
-          { status: 400 }
-        )
-      }
-    }
-
-    // Verify DOI uniqueness if provided
-    if (data.doi) {
-      const existingWithDoi = await prisma.publication.findUnique({
-        where: { doi: data.doi },
-      })
-
-      if (existingWithDoi) {
-        return NextResponse.json(
-          { error: "DOI already exists" },
-          { status: 400 }
-        )
-      }
-    }
-
-    const publication = await prisma.publication.create({
-      data: {
-        submissionId: data.submissionId,
-        issueId: data.issueId,
-        title: submission.title,
-        abstract: submission.abstract,
-        keywords: submission.keywords,
-        pages: data.pages,
-        doi: data.doi,
-        datePublished: data.datePublished ? new Date(data.datePublished) : null,
-        licenseUrl: data.licenseUrl,
-        status: data.status,
-        isCurrentVersion: true,
-        version: 1,
-      },
-      include: {
-        submission: {
-          select: {
-            id: true,
-            title: true,
-          },
-        },
-        issue: {
-          select: {
-            id: true,
-            volume: true,
-            number: true,
-            year: true,
-          },
-        },
-      },
-    })
-
-    // Update submission status if publishing
-    if (data.status === "published") {
-      await prisma.submission.update({
-        where: { id: data.submissionId },
-        data: { 
-          status: "published",
-          dateStatusModified: new Date(),
-        },
-      })
-    }
-
-    return NextResponse.json(publication, { status: 201 })
-  } catch (error: any) {
-    if (error instanceof z.ZodError) {
-      return NextResponse.json(
-        { error: "Invalid input", details: error.errors },
-        { status: 400 }
-      )
-    }
-
-    console.error("Create publication error:", error)
-    return NextResponse.json(
-      { error: "Failed to create publication" },
-      { status: 500 }
-    )
-  }
-})
-
+}

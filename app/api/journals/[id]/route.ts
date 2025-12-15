@@ -1,223 +1,107 @@
-// app/api/journals/[id]/route.ts
 import { NextRequest, NextResponse } from "next/server"
-import { authMiddleware, AuthRequest, requireRole } from "@/lib/auth/middleware"
-import { prisma } from "@/lib/prisma"
-import { z } from "zod"
+import { createClient } from "@/lib/supabase/server"
+import { requireEditor, requireAdmin } from "@/lib/middleware/auth"
+import { logger } from "@/lib/utils/logger"
 
-const updateJournalSchema = z.object({
-  name: z.string().min(1).optional(),
-  acronym: z.string().min(1).optional(),
-  description: z.string().min(1).optional(),
-  issn: z.string().optional(),
-  publisher: z.string().optional(),
-  contactEmail: z.string().email().optional(),
-  logo: z.string().optional(),
-  primaryLocale: z.string().optional(),
-})
-
-export const GET = authMiddleware(async (
-  req: AuthRequest,
-  { params }: { params: Promise<{ id: string }> }
-) => {
+export async function GET(
+  request: NextRequest,
+  { params }: { params: { id: string } }
+) {
   try {
-    const { id } = await params
+    // GET is public for published journals, but we can add auth for sensitive data
+    const supabase = await createClient()
+    const { data, error } = await supabase
+      .from("journals")
+      .select("*")
+      .eq("id", params.id)
+      .single()
 
-    // Try to find by ID first, then by path
-    let journal = await prisma.journal.findUnique({
-      where: { id },
-      include: {
-        sections: {
-          where: { isActive: true },
-          orderBy: { sequence: "asc" },
-        },
-        _count: {
-          select: {
-            users: true,
-            submissions: true,
-            issues: true,
-            publications: true,
-          },
-        },
-      },
-    })
-
-    // If not found by ID, try by path
-    if (!journal) {
-      journal = await prisma.journal.findUnique({
-        where: { path: id },
-        include: {
-          sections: {
-            where: { isActive: true },
-            orderBy: { sequence: "asc" },
-          },
-          _count: {
-            select: {
-              users: true,
-              submissions: true,
-              issues: true,
-              publications: true,
-            },
-          },
-        },
-      })
-    }
-
-    if (!journal) {
-      return NextResponse.json(
-        { error: "Journal not found" },
-        { status: 404 }
-      )
-    }
-
-    return NextResponse.json(journal)
+    if (error) return NextResponse.json({ error: error.message }, { status: 404 })
+    return NextResponse.json(data)
   } catch (error: any) {
-    console.error("Get journal error:", error)
-    return NextResponse.json(
-      { error: "Failed to fetch journal" },
-      { status: 500 }
-    )
+    logger.apiError('/api/journals/[id]', 'GET', error)
+    return NextResponse.json({ error: "Internal server error" }, { status: 500 })
   }
-})
+}
 
-export const PUT = requireRole(["admin", "editor"])(async (
-  req: AuthRequest,
-  { params }: { params: Promise<{ id: string }> }
-) => {
+export async function PATCH(
+  request: NextRequest,
+  { params }: { params: { id: string } }
+) {
+  const startTime = Date.now()
+
   try {
-    const { id } = await params
-    const body = await req.json()
-    const data = updateJournalSchema.parse(body)
-
-    // Check if journal exists
-    const existingJournal = await prisma.journal.findUnique({
-      where: { id },
-    })
-
-    // If not found by ID, try by path
-    const journalToUpdate = existingJournal || await prisma.journal.findUnique({
-      where: { path: id },
-    })
-
-    if (!journalToUpdate) {
-      return NextResponse.json(
-        { error: "Journal not found" },
-        { status: 404 }
-      )
+    // Check authorization - must be editor or admin
+    const { authorized: isEditor, user: editorUser } = await requireEditor(request)
+    const { authorized: isAdmin, user: adminUser } = await requireAdmin(request)
+    
+    if (!isEditor && !isAdmin) {
+      const error = 'Forbidden - Requires editor or admin role'
+      logger.apiError('/api/journals/[id]', 'PATCH', error)
+      return NextResponse.json({ error }, { status: 403 })
     }
 
-    // Editors can only update journals they're assigned to
-    if (req.user?.roles.includes("editor") && !req.user?.roles.includes("admin")) {
-      const user = await prisma.user.findUnique({
-        where: { id: req.user.userId },
-        select: { journalId: true },
-      })
+    const user = editorUser || adminUser
+    logger.apiRequest('/api/journals/[id]', 'PATCH', user?.id)
 
-      if (user?.journalId !== journalToUpdate.id) {
-        return NextResponse.json(
-          { error: "Unauthorized. You can only update your assigned journal" },
-          { status: 403 }
-        )
-      }
+    const body = await request.json()
+    const supabase = await createClient()
+    const { data, error } = await supabase
+      .from("journals")
+      .update(body)
+      .eq("id", params.id)
+      .select()
+      .single()
+
+    if (error) {
+      logger.apiError('/api/journals/[id]', 'PATCH', error, user?.id)
+      return NextResponse.json({ error: error.message }, { status: 500 })
     }
 
-    const journal = await prisma.journal.update({
-      where: { id: journalToUpdate.id },
-      data: {
-        ...data,
-      },
-      include: {
-        sections: {
-          where: { isActive: true },
-          orderBy: { sequence: "asc" },
-        },
-      },
-    })
+    const duration = Date.now() - startTime
+    logger.apiResponse('/api/journals/[id]', 'PATCH', 200, duration, user?.id)
 
-    return NextResponse.json(journal)
+    return NextResponse.json(data)
   } catch (error: any) {
-    if (error instanceof z.ZodError) {
-      return NextResponse.json(
-        { error: "Invalid input", details: error.errors },
-        { status: 400 }
-      )
-    }
-
-    console.error("Update journal error:", error)
-    return NextResponse.json(
-      { error: "Failed to update journal" },
-      { status: 500 }
-    )
+    logger.apiError('/api/journals/[id]', 'PATCH', error)
+    return NextResponse.json({ error: "Internal server error" }, { status: 500 })
   }
-})
+}
 
-export const DELETE = requireRole(["admin"])(async (
-  req: AuthRequest,
-  { params }: { params: Promise<{ id: string }> }
-) => {
+export async function DELETE(
+  request: NextRequest,
+  { params }: { params: { id: string } }
+) {
+  const startTime = Date.now()
+
   try {
-    const { id } = await params
-
-    const journal = await prisma.journal.findUnique({
-      where: { id },
-      select: {
-        _count: {
-          select: {
-            submissions: true,
-            issues: true,
-            publications: true,
-          },
-        },
-      },
-    })
-
-    // If not found by ID, try by path
-    const journalToDelete = journal || await prisma.journal.findUnique({
-      where: { path: id },
-    })
-
-    if (!journalToDelete) {
-      return NextResponse.json(
-        { error: "Journal not found" },
-        { status: 404 }
-      )
+    // Check authorization - must be admin only (deleting journal is critical)
+    const { authorized, user, error: authError } = await requireAdmin(request)
+    if (!authorized) {
+      logger.apiError('/api/journals/[id]', 'DELETE', authError)
+      return NextResponse.json({ error: authError || 'Forbidden - Requires admin role' }, { status: 403 })
     }
 
-    // Prevent deletion if journal has content
-    const journalWithCounts = await prisma.journal.findUnique({
-      where: { id: journalToDelete.id },
-      select: {
-        _count: {
-          select: {
-            submissions: true,
-            issues: true,
-            publications: true,
-          },
-        },
-      },
-    })
+    logger.apiRequest('/api/journals/[id]', 'DELETE', user?.id)
 
-    if (journalWithCounts && (
-      journalWithCounts._count.submissions > 0 ||
-      journalWithCounts._count.issues > 0 ||
-      journalWithCounts._count.publications > 0
-    )) {
-      return NextResponse.json(
-        { error: "Cannot delete journal with existing submissions, issues, or publications" },
-        { status: 400 }
-      )
+    const supabase = await createClient()
+    const { error } = await supabase
+      .from("journals")
+      .delete()
+      .eq("id", params.id)
+
+    if (error) {
+      logger.apiError('/api/journals/[id]', 'DELETE', error, user?.id)
+      return NextResponse.json({ error: error.message }, { status: 500 })
     }
 
-    await prisma.journal.delete({
-      where: { id: journalToDelete.id },
-    })
+    const duration = Date.now() - startTime
+    logger.apiResponse('/api/journals/[id]', 'DELETE', 200, duration, user?.id)
+    logger.warn('Journal deleted', { journalId: params.id }, { userId: user?.id, route: '/api/journals/[id]' })
 
-    return NextResponse.json({ message: "Journal deleted successfully" })
+    return NextResponse.json({ success: true })
   } catch (error: any) {
-    console.error("Delete journal error:", error)
-    return NextResponse.json(
-      { error: "Failed to delete journal" },
-      { status: 500 }
-    )
+    logger.apiError('/api/journals/[id]', 'DELETE', error)
+    return NextResponse.json({ error: "Internal server error" }, { status: 500 })
   }
-})
-
+}

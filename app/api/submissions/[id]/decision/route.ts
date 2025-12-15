@@ -1,83 +1,77 @@
 // app/api/submissions/[id]/decision/route.ts
+// Backward-compatible decision endpoint. Internally uses the same Supabase workflow model
+// as /api/workflow/decision.
 import { NextRequest, NextResponse } from "next/server"
-import { authMiddleware, AuthRequest, requireRole } from "@/lib/auth/middleware"
-import { prisma } from "@/lib/prisma"
-import { z } from "zod"
+import { createClient } from "@/lib/supabase/server"
+import { requireEditor } from "@/lib/middleware/auth"
+import { logger } from "@/lib/utils/logger"
+import {
+  SUBMISSION_EDITOR_DECISION_ACCEPT,
+  SUBMISSION_EDITOR_DECISION_DECLINE,
+  SUBMISSION_EDITOR_DECISION_PENDING_REVISIONS,
+} from "@/lib/workflow/ojs-constants"
 
-const createDecisionSchema = z.object({
-  decision: z.enum(["accept", "decline", "request_revisions"]),
-  comments: z.string().optional(),
-  reviewRoundId: z.string().optional(),
-})
+export async function POST(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
+  const startTime = Date.now()
 
-export const POST = requireRole(["editor", "admin"])(async (
-  req: AuthRequest,
-  { params }: { params: Promise<{ id: string }> }
-) => {
   try {
     const { id } = await params
+    const submissionIdNum = parseInt(id, 10)
+    if (Number.isNaN(submissionIdNum)) {
+      return NextResponse.json({ error: "Invalid submission id" }, { status: 400 })
+    }
+
+    const { authorized, user, error: authError } = await requireEditor(req)
+    if (!authorized) {
+      logger.apiError("/api/submissions/[id]/decision", "POST", authError)
+      return NextResponse.json({ error: authError || "Forbidden" }, { status: 403 })
+    }
+
     const body = await req.json()
-    const data = createDecisionSchema.parse(body)
+    const decision = body?.decision
+    const comments = body?.comments
+    const reviewRoundId = body?.reviewRoundId
 
-    // Check if submission exists
-    const submission = await prisma.submission.findUnique({
-      where: { id },
-      select: {
-        id: true,
-        status: true,
-      },
-    })
-
-    if (!submission) {
-      return NextResponse.json(
-        { error: "Submission not found" },
-        { status: 404 }
-      )
+    const decisionMap: Record<string, number> = {
+      accept: SUBMISSION_EDITOR_DECISION_ACCEPT,
+      decline: SUBMISSION_EDITOR_DECISION_DECLINE,
+      request_revisions: SUBMISSION_EDITOR_DECISION_PENDING_REVISIONS,
+      revisions: SUBMISSION_EDITOR_DECISION_PENDING_REVISIONS,
     }
 
-    // Map decision to status
-    const statusMap: Record<string, string> = {
-      accept: "accepted",
-      decline: "declined",
-      request_revisions: "revision_required",
+    const decisionCode = decisionMap[String(decision)]
+    if (!decisionCode) {
+      return NextResponse.json({ error: "Invalid decision" }, { status: 400 })
     }
 
-    const newStatus = statusMap[data.decision]
+    const supabase = await createClient()
 
-    // Create editorial decision
-    const editorialDecision = await prisma.editorialDecision.create({
-      data: {
-        submissionId: id,
-        reviewRoundId: data.reviewRoundId || null,
-        editorId: req.user!.userId,
-        decision: data.decision,
-        comments: data.comments,
-      },
+    // Reuse the same semantics as /api/workflow/decision by updating submission + logging decision
+    // Keep status/stage mapping handled centrally there; here we just call the same update approach.
+    const workflowDecisionRes = await fetch(new URL("/api/workflow/decision", req.url), {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        submissionId: submissionIdNum,
+        decision: decisionCode,
+        comments,
+        reviewRoundId,
+      }),
     })
 
-    // Update submission status
-    await prisma.submission.update({
-      where: { id },
-      data: {
-        status: newStatus as any,
-        dateStatusModified: new Date(),
-      },
-    })
+    const payload = await workflowDecisionRes.json().catch(() => ({}))
+    if (!workflowDecisionRes.ok) {
+      return NextResponse.json(payload, { status: workflowDecisionRes.status })
+    }
 
-    return NextResponse.json(editorialDecision, { status: 201 })
+    const duration = Date.now() - startTime
+    logger.apiResponse("/api/submissions/[id]/decision", "POST", 200, duration, user?.id)
+
+    // Return the updated submission payload for compatibility
+    return NextResponse.json(payload, { status: 200 })
   } catch (error: any) {
-    if (error instanceof z.ZodError) {
-      return NextResponse.json(
-        { error: "Invalid input", details: error.errors },
-        { status: 400 }
-      )
-    }
-
-    console.error("Create decision error:", error)
-    return NextResponse.json(
-      { error: "Failed to create editorial decision" },
-      { status: 500 }
-    )
+    logger.apiError("/api/submissions/[id]/decision", "POST", error)
+    return NextResponse.json({ error: "Internal server error" }, { status: 500 })
   }
-})
+}
 

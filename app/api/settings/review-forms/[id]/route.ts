@@ -1,4 +1,4 @@
-import { createRouteHandlerClient } from '@/lib/supabase/server';
+import { createClient } from '@/lib/supabase/server';
 import { NextResponse } from 'next/server';
 import { ReviewFormService } from '@/lib/services/review-form.service';
 
@@ -13,7 +13,7 @@ export async function GET(
     { params }: Props
 ) {
     const { id } = await params;
-    const supabase = await createRouteHandlerClient();
+    const supabase = await createClient();
     const service = new ReviewFormService(supabase);
 
     const data = await service.getForm(parseInt(id));
@@ -27,7 +27,7 @@ export async function PUT(
     { params }: Props
 ) {
     const { id } = await params;
-    const supabase = await createRouteHandlerClient();
+    const supabase = await createClient();
     const service = new ReviewFormService(supabase);
     const json = await request.json();
 
@@ -49,7 +49,7 @@ export async function DELETE(
     { params }: Props
 ) {
     const { id } = await params;
-    const supabase = await createRouteHandlerClient();
+    const supabase = await createClient();
     const service = new ReviewFormService(supabase);
 
     await service.deleteForm(parseInt(id));

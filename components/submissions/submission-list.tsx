@@ -1,6 +1,6 @@
 "use client"
 
-import { useState } from "react"
+import { useMemo, useState } from "react"
 import { Search, Filter, Plus, LayoutGrid, List } from "lucide-react"
 import { Input } from "@/components/ui/input"
 import { Button } from "@/components/ui/button"
@@ -9,6 +9,8 @@ import { SubmissionCard } from "./submission-card"
 import type { Submission } from "@/lib/types"
 import Link from "next/link"
 import { cn } from "@/lib/utils"
+import { useAuth } from "@/lib/hooks/use-auth"
+import { getSubmissionStatusColors } from "@/lib/ui/status-colors"
 
 interface SubmissionListProps {
   submissions: Submission[]
@@ -17,9 +19,14 @@ interface SubmissionListProps {
 }
 
 export function SubmissionList({ submissions, onDelete, showCreateButton = true }: SubmissionListProps) {
+  const { currentJournal } = useAuth()
   const [search, setSearch] = useState("")
   const [statusFilter, setStatusFilter] = useState<string>("all")
-  const [viewMode, setViewMode] = useState<"grid" | "list">("grid")
+  const [viewMode, setViewMode] = useState<"grid" | "list">("list")
+
+  const newSubmissionHref = useMemo(() => {
+    return currentJournal?.path ? `/j/${currentJournal.path}/submissions/new` : "/submissions/new"
+  }, [currentJournal?.path])
 
   const filteredSubmissions = submissions.filter((sub) => {
     const matchesSearch =
@@ -53,7 +60,7 @@ export function SubmissionList({ submissions, onDelete, showCreateButton = true 
             </SelectTrigger>
             <SelectContent>
               <SelectItem value="all">All Status</SelectItem>
-              <SelectItem value="submitted">Submitted</SelectItem>
+              <SelectItem value="submission">Submission</SelectItem>
               <SelectItem value="under_review">Under Review</SelectItem>
               <SelectItem value="revision_required">Revision Required</SelectItem>
               <SelectItem value="accepted">Accepted</SelectItem>
@@ -84,7 +91,7 @@ export function SubmissionList({ submissions, onDelete, showCreateButton = true 
           </div>
           {showCreateButton && (
             <Button asChild>
-              <Link href="/submissions/new">
+              <Link href={newSubmissionHref}>
                 <Plus className="mr-2 h-4 w-4" />
                 New Submission
               </Link>
@@ -104,19 +111,63 @@ export function SubmissionList({ submissions, onDelete, showCreateButton = true 
           <p className="text-muted-foreground">No submissions found</p>
           {showCreateButton && (
             <Button asChild className="mt-4">
-              <Link href="/submissions/new">
+              <Link href={newSubmissionHref}>
                 <Plus className="mr-2 h-4 w-4" />
                 Create your first submission
               </Link>
             </Button>
           )}
         </div>
-      ) : (
-        <div className={cn(viewMode === "grid" ? "grid gap-4 sm:grid-cols-2 lg:grid-cols-3" : "space-y-3")}>
-          {filteredSubmissions.map((submission) => (
-            <SubmissionCard key={submission.id} submission={submission} onDelete={onDelete} />
-          ))}
+      ) : viewMode === "list" ? (
+        <div className="overflow-x-auto rounded-md border">
+          <table className="w-full text-sm">
+            <thead className="bg-muted/50">
+              <tr>
+                <th className="px-4 py-3 text-left font-medium">Title</th>
+                <th className="px-4 py-3 text-left font-medium">Section</th>
+                <th className="px-4 py-3 text-left font-medium">Status</th>
+                <th className="px-4 py-3 text-left font-medium">Updated</th>
+                <th className="px-4 py-3 text-right font-medium">Actions</th>
+              </tr>
+            </thead>
+            <tbody>
+              {filteredSubmissions.map((s) => {
+                const sectionLabel = (s as any)?.section?.title || (s as any)?.sectionTitle || "-"
+                const updated = (s as any)?.updatedAt || (s as any)?.dateLastActivity || (s as any)?.dateSubmitted || "-"
+                const detailHref = `/submissions/${s.id}`
+                const statusColors = getSubmissionStatusColors(s.status, s.stageId)
+                const statusLabel = statusColors.label || 
+                  (typeof s.status === "number" ? "In Workflow" : String(s.status).replace("_", " "))
+                
+                return (
+                  <tr key={s.id} className="border-t">
+                    <td className="px-4 py-3">
+                      <Link href={detailHref} className="font-medium hover:underline">
+                        {s.title}
+                      </Link>
+                    </td>
+                    <td className="px-4 py-3 text-muted-foreground">{sectionLabel}</td>
+                    <td className="px-4 py-3">
+                      <span className={cn("inline-flex items-center rounded-md border px-2 py-0.5 text-xs font-medium", statusColors.badge)}>
+                        {statusLabel}
+                      </span>
+                    </td>
+                    <td className="px-4 py-3 text-muted-foreground">{updated?.toString().slice(0, 10)}</td>
+                    <td className="px-4 py-3 text-right">
+                      <Button asChild variant="ghost" size="sm">
+                        <Link href={detailHref}>View</Link>
+                      </Button>
+                    </td>
+                  </tr>
+                )
+              })}
+            </tbody>
+          </table>
         </div>
+      ) : (
+        <div className={cn("grid gap-4 sm:grid-cols-2 lg:grid-cols-3")}>{filteredSubmissions.map((submission) => (
+          <SubmissionCard key={submission.id} submission={submission} onDelete={onDelete} />
+        ))}</div>
       )}
     </div>
   )

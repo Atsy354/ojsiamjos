@@ -1,0 +1,62 @@
+﻿[dotenv@17.2.3] injecting env (4) from .env.local -- tip: ΓÜÖ∩╕Å  write to custom object with { processEnv: myObject }
+≡ƒöì Auditing Database Schema...
+
+≡ƒôï Checking Tables and Columns:
+
+Γ£à journals:
+   Columns: journal_id, path, enabled, seq, primary_locale, created_at
+   Sample ID: 1
+
+Γ£à users:
+   Columns: id, username, email, first_name, last_name, role, affiliation, country, url, created_at, updated_at
+   Sample ID: 00000000-0000-0000-0000-000000000001
+
+Γ¥î submissions: Could not find the table 'public.submissions' in the schema cache
+
+Γ£à issues:
+   Columns: id, journal_id, volume, number, year, title, description, cover_image, date_published, status, created_at, published, is_current
+   Sample ID: 1
+
+ΓÜá∩╕Å  publications: Table exists but empty
+
+Γ¥î reviews: Could not find the table 'public.reviews' in the schema cache
+
+Γ£à sections:
+   Columns: id, journal_id, title, abbrev, seq
+   Sample ID: 1
+
+Γ£à authors:
+   Columns: id, article_id, first_name, last_name, email, affiliation, orcid, primary_contact, seq
+   Sample ID: 1
+
+ΓÜá∩╕Å  submission_files: Table exists but empty
+
+Γ¥î editorial_decisions: Could not find the table 'public.editorial_decisions' in the schema cache
+
+Γ¥î workflow_stages: Could not find the table 'public.workflow_stages' in the schema cache
+
+ΓÜá∩╕Å  notifications: Table exists but empty
+
+Γ¥î discussions: Could not find the table 'public.discussions' in the schema cache
+
+Γ¥î galleys: Could not find the table 'public.galleys' in the schema cache
+
+
+≡ƒº¬ Testing Specific Queries:
+
+1. Testing journals query...
+   Γ£à PASS: Found 1 journals
+   Sample: {
+  "journal_id": 1,
+  "path": "default",
+  "enabled": 1,
+  "seq": 1,
+  "primary_locale": "en_US",
+  "created_at": "2025-12-07T13:49:16.13483"
+}
+
+2. Testing users query...
+   Γ¥î FAIL: column users.roles does not exist
+
+3. Testing submissions with joins...
+   Γ¥î FAIL: Could not find the table 'public.submissions' in the schema cache

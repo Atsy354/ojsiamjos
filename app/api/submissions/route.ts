@@ -1,239 +1,242 @@
-// app/api/submissions/route.ts
 import { NextRequest, NextResponse } from "next/server"
-import { authMiddleware, AuthRequest } from "@/lib/auth/middleware"
-import { prisma } from "@/lib/prisma"
-import { z } from "zod"
+import { createClient } from "@/lib/supabase/server"
+import { validateBody, createSubmissionSchema } from "@/lib/validation/schemas"
+import { logger } from "@/lib/utils/logger"
+import { requireAuth } from "@/lib/middleware/auth"
+import { getContextId } from "@/lib/utils/context"
+import { STATUS_QUEUED, WORKFLOW_STAGE_ID_SUBMISSION } from "@/lib/workflow/ojs-constants"
+import { transformFromDB } from "@/lib/utils/transform"
 
-const createSubmissionSchema = z.object({
-  journalId: z.string().min(1, "Journal ID is required"),
-  sectionId: z.string().min(1, "Section ID is required"),
-  title: z.string().min(1, "Title is required"),
-  abstract: z.string().min(1, "Abstract is required"),
-  keywords: z.array(z.string()).default([]),
-  locale: z.string().default("en"),
-  authors: z.array(
-    z.object({
-      firstName: z.string().min(1),
-      lastName: z.string().min(1),
-      email: z.string().email(),
-      affiliation: z.string().optional(),
-      orcid: z.string().optional(),
-      country: z.string().optional(),
-      isPrimary: z.boolean().default(false),
-      userId: z.string().optional(),
-    })
-  ).optional(),
-})
+// GET /api/submissions - List submissions
+export async function GET(request: NextRequest) {
+  const startTime = Date.now()
 
-export const GET = authMiddleware(async (req: AuthRequest) => {
   try {
-    const { searchParams } = new URL(req.url)
-    const journalId = searchParams.get("journalId")
-    const submitterId = searchParams.get("submitterId")
-    const status = searchParams.get("status")
-
-    const where: any = {}
-
-    // Only editors and admins can see all submissions
-    if (req.user?.roles.includes("editor") || req.user?.roles.includes("admin")) {
-      if (journalId) where.journalId = journalId
-      if (status) where.status = status
-      if (submitterId) where.submitterId = submitterId
-    } else {
-      // Authors can only see their own submissions
-      where.submitterId = req.user!.userId
-      if (journalId) where.journalId = journalId
-      if (status) where.status = status
+    // Check authorization - must be authenticated
+    const { authorized, user, error: authError } = await requireAuth(request)
+    if (!authorized) {
+      logger.apiError('/api/submissions', 'GET', authError)
+      return NextResponse.json({ error: authError }, { status: 401 })
     }
 
-    const submissions = await prisma.submission.findMany({
-      where,
-      include: {
-        journal: {
-          select: {
-            id: true,
-            name: true,
-            path: true,
-          },
-        },
-        section: {
-          select: {
-            id: true,
-            title: true,
-            abbreviation: true,
-          },
-        },
-        submitter: {
-          select: {
-            id: true,
-            firstName: true,
-            lastName: true,
-            email: true,
-          },
-        },
-        authors: true,
-        files: {
-          select: {
-            id: true,
-            fileName: true,
-            fileType: true,
-            fileStage: true,
-            uploadedAt: true,
-          },
-        },
-        _count: {
-          select: {
-            reviewAssignments: true,
-            reviewRounds: true,
-          },
-        },
-      },
-      orderBy: {
-        createdAt: "desc",
-      },
-    })
+    logger.apiRequest('/api/submissions', 'GET', user?.id)
 
-    return NextResponse.json(submissions)
-  } catch (error: any) {
-    console.error("Get submissions error:", error)
-    return NextResponse.json(
-      { error: "Failed to fetch submissions" },
-      { status: 500 }
-    )
-  }
-})
+    const supabase = await createClient()
+    const { searchParams } = new URL(request.url)
+    const journalIdParam = searchParams.get("journalId")
+    let journalId: number | null = null
+    if (journalIdParam && journalIdParam !== "undefined" && journalIdParam !== "null") {
+      const parsed = parseInt(journalIdParam)
+      if (!isNaN(parsed) && parsed > 0) journalId = parsed
+    }
+    if (!journalId) {
+      journalId = await getContextId()
+    }
+    const statusParam = searchParams.get("status")
 
-export const POST = authMiddleware(async (req: AuthRequest) => {
-  try {
-    const body = await req.json()
-    console.log("Received submission data:", JSON.stringify(body, null, 2))
-    
-    const data = createSubmissionSchema.parse(body)
-    console.log("Parsed submission data:", JSON.stringify(data, null, 2))
-
-    // Verify journal and section exist
-    const journal = await prisma.journal.findUnique({
-      where: { id: data.journalId },
-    })
-
-    if (!journal) {
-      return NextResponse.json(
-        { error: "Journal not found" },
-        { status: 404 }
-      )
+    if (!journalId || journalId <= 0) {
+      logger.apiError('/api/submissions', 'GET', 'Invalid journal context')
+      return NextResponse.json({ error: "Invalid journal context" }, { status: 400 })
     }
 
-    const section = await prisma.section.findUnique({
-      where: { id: data.sectionId },
-    })
+    let query = supabase
+      .from("submissions")
+      .select(`
+        *,
+        submitter:users!submissions_submitter_id_fkey(id, first_name, last_name, email),
+        section:sections(id, title)
+      `)
+      .order("date_submitted", { ascending: false })
+      .eq("journal_id", journalId)
 
-    if (!section || section.journalId !== data.journalId) {
-      return NextResponse.json(
-        { error: "Section not found or does not belong to journal" },
-        { status: 404 }
-      )
+    // Filter by user role - SECURITY CRITICAL
+    const userRoles = user?.roles || []
+    const isPrivilegedUser = userRoles.includes('admin') || userRoles.includes('manager') || userRoles.includes('editor')
+
+    if (!isPrivilegedUser) {
+      // Authors/Reviewers only see their own submissions
+      query = query.eq("submitter_id", user?.id)
     }
 
-    // Validate user exists
-    const submitter = await prisma.user.findUnique({
-      where: { id: req.user!.userId },
-      select: { id: true },
-    })
-
-    if (!submitter) {
-      return NextResponse.json(
-        { error: "Submitter user not found" },
-        { status: 404 }
-      )
-    }
-
-    // Create submission
-    console.log("Creating submission with userId:", req.user!.userId)
-    console.log("Journal ID:", data.journalId)
-    console.log("Section ID:", data.sectionId)
-    
-    const submission = await prisma.submission.create({
-      data: {
-        journalId: data.journalId,
-        sectionId: data.sectionId,
-        title: data.title,
-        abstract: data.abstract,
-        keywords: data.keywords || [],
-        locale: data.locale || "en",
-        submitterId: req.user!.userId,
-        status: "incomplete",
-        stageId: 1,
-        currentRound: 1,
-        authors: data.authors && data.authors.length > 0
-          ? {
-              create: data.authors.map((author, index) => ({
-                firstName: author.firstName,
-                lastName: author.lastName,
-                email: author.email,
-                affiliation: author.affiliation || null,
-                orcid: author.orcid || null,
-                country: author.country || null,
-                isPrimary: author.isPrimary || false,
-                userId: author.userId || null,
-                sequence: index,
-              })),
-            }
-          : undefined,
-      },
-      include: {
-        journal: {
-          select: {
-            id: true,
-            name: true,
-            path: true,
-          },
-        },
-        section: {
-          select: {
-            id: true,
-            title: true,
-          },
-        },
-        authors: true,
-      },
-    })
-
-    return NextResponse.json(submission, { status: 201 })
-  } catch (error: any) {
-    if (error instanceof z.ZodError) {
-      return NextResponse.json(
-        { error: "Invalid input", details: error.errors },
-        { status: 400 }
-      )
-    }
-
-    console.error("Create submission error:", error)
-    console.error("Error name:", error.name)
-    console.error("Error message:", error.message)
-    console.error("Error code:", error.code)
-    if (error.meta) {
-      console.error("Prisma error meta:", JSON.stringify(error.meta, null, 2))
-    }
-    if (error.stack) {
-      console.error("Error stack:", error.stack)
-    }
-    
-    // Return more detailed error message
-    const errorMessage = error.message || "Failed to create submission"
-    const errorDetails: any = {
-      error: errorMessage,
-    }
-    
-    if (process.env.NODE_ENV === "development") {
-      errorDetails.details = {
-        name: error.name,
-        code: error.code,
-        meta: error.meta,
-        stack: error.stack,
+    // Filter by status - support both integer (OJS), string (legacy), and semantic filters (active/incomplete/complete)
+    if (statusParam) {
+      const statusNum = parseInt(statusParam)
+      if (!isNaN(statusNum)) {
+        // OJS integer status
+        query = query.eq("status", statusNum)
+      } else if (statusParam === "active") {
+        // Active = status QUEUED (in workflow), not declined or published
+        query = query.eq("status", STATUS_QUEUED)
+      } else if (statusParam === "incomplete") {
+        // Incomplete = status QUEUED with stage_id = 1 (submission stage) and possibly missing date_submitted
+        query = query.eq("status", STATUS_QUEUED).eq("stage_id", WORKFLOW_STAGE_ID_SUBMISSION)
+      } else if (statusParam === "complete") {
+        // Complete = published or declined
+        const { STATUS_PUBLISHED, STATUS_DECLINED } = await import("@/lib/workflow/ojs-constants")
+        query = query.in("status", [STATUS_PUBLISHED, STATUS_DECLINED])
+      } else {
+        // Legacy string status - convert to OJS integer for query
+        const { mapStringStatusToOJS } = await import("@/lib/workflow/ojs-constants")
+        const ojsStatus = mapStringStatusToOJS(statusParam)
+        query = query.eq("status", ojsStatus)
       }
     }
-    
-    return NextResponse.json(errorDetails, { status: 500 })
-  }
-})
 
+    const { data: submissions, error } = await query
+
+    if (error) {
+      logger.apiError('/api/submissions', 'GET', error, user?.id)
+      return NextResponse.json({ error: error.message }, { status: 500 })
+    }
+
+    // Validate data integrity
+    if (submissions) {
+      const missingIds = submissions.filter((s: any) => !s.id)
+      if (missingIds.length > 0) {
+        console.error('[API /submissions] Found submissions without ID:', missingIds.length, 'submissions')
+        console.error('[API /submissions] Sample:', missingIds[0])
+      }
+    }
+
+    const duration = Date.now() - startTime
+    logger.apiResponse('/api/submissions', 'GET', 200, duration, user?.id)
+
+    // Transform from snake_case (DB) to camelCase (frontend)
+    const transformed = transformFromDB(submissions)
+    return NextResponse.json(transformed)
+  } catch (error) {
+    logger.apiError('/api/submissions', 'GET', error)
+    return NextResponse.json({ error: "Internal server error" }, { status: 500 })
+  }
+}
+
+// POST /api/submissions - Create new submission
+export async function POST(request: NextRequest) {
+  const startTime = Date.now()
+
+  try {
+    const body = await request.json()
+    const supabase = await createClient()
+    const journalId = await getContextId()
+
+    // Get verified user from Supabase Auth (do not trust session user from cookies/storage)
+    const { data: { user: authUser }, error: authUserError } = await supabase.auth.getUser()
+    if (authUserError || !authUser) {
+      logger.apiError('/api/submissions', 'POST', 'No session')
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
+    }
+
+    if (!journalId || journalId <= 0) {
+      logger.apiError('/api/submissions', 'POST', 'Invalid journal context', authUser.id)
+      return NextResponse.json({ error: "Invalid journal context" }, { status: 400 })
+    }
+
+    logger.apiRequest('/api/submissions', 'POST', authUser.id)
+
+    // Validate input
+    const validation = validateBody(createSubmissionSchema, body)
+    if (!validation.success) {
+      logger.warn('Validation failed', { error: validation.error }, { userId: authUser.id, route: '/api/submissions' })
+      return NextResponse.json({ error: validation.error }, { status: 400 })
+    }
+
+    const { title, abstract, sectionId } = validation.data
+
+    // Create submission with OJS status constants
+    console.log('[API POST /submissions] Creating submission:', {
+      title,
+      sectionId,
+      journalId,
+      submitterId: authUser.id
+    })
+
+    const { data: submission, error: submissionError } = await supabase
+      .from("submissions")
+      .insert({
+        title,
+        abstract: abstract || "",
+        section_id: sectionId,
+        submitter_id: authUser.id,
+        journal_id: journalId,
+        status: STATUS_QUEUED, // OJS: STATUS_QUEUED = 1
+        stage_id: WORKFLOW_STAGE_ID_SUBMISSION, // Stage 1: Submission
+        date_submitted: new Date().toISOString(),
+      })
+      .select()
+      .single()
+
+    console.log('[API POST /submissions] Insert result:', {
+      success: !submissionError,
+      submissionId: submission?.id,
+      error: submissionError?.message
+    })
+
+    if (submissionError) {
+      logger.apiError('/api/submissions', 'POST', submissionError, authUser.id)
+      return NextResponse.json({ error: submissionError.message }, { status: 500 })
+    }
+
+    // Verify the submission was actually saved
+    const { data: verify, error: verifyError } = await supabase
+      .from("submissions")
+      .select("id, title")
+      .eq("id", submission.id)
+      .maybeSingle()
+
+    console.log('[API POST /submissions] Verification query:', {
+      found: !!verify,
+      id: verify?.id,
+      error: verifyError?.message
+    })
+
+    if (!verify) {
+      console.error('[API POST /submissions] CRITICAL: Submission created but not found on re-query!')
+    }
+
+    // Save authors if provided
+    const authorsData = body.authors
+    console.log('[API POST /submissions] Authors data received:', {
+      hasAuthors: !!authorsData,
+      isArray: Array.isArray(authorsData),
+      length: authorsData?.length,
+      data: authorsData
+    })
+
+    if (authorsData && Array.isArray(authorsData) && authorsData.length > 0) {
+      console.log('[API POST /submissions] Saving authors:', authorsData.length)
+
+      const authorsToInsert = authorsData.map((author: any, index: number) => ({
+        article_id: submission.id,
+        first_name: author.firstName || author.first_name,
+        last_name: author.lastName || author.last_name,
+        email: author.email,
+        affiliation: author.affiliation || null,
+        orcid: author.orcid || null,
+        primary_contact: author.isPrimary || index === 0,  // Match DB: primary_contact not is_primary
+        seq: index + 1,
+      }))
+
+      const { data: savedAuthors, error: authorsError } = await supabase
+        .from('authors')
+        .insert(authorsToInsert)
+        .select()
+
+      if (authorsError) {
+        console.error('[API POST /submissions] Authors save error:', authorsError)
+        // Don't fail the whole request, just log
+        logger.warn('Failed to save authors', { error: authorsError.message }, { userId: authUser.id })
+      } else {
+        console.log('[API POST /submissions] Authors saved:', savedAuthors?.length || 0)
+      }
+    }
+
+    const duration = Date.now() - startTime
+    logger.apiResponse('/api/submissions', 'POST', 201, duration, authUser.id)
+    logger.info('Submission created', { submissionId: submission.id }, { userId: authUser.id, route: '/api/submissions' })
+
+    return NextResponse.json(submission, { status: 201 })
+  } catch (error) {
+    logger.apiError('/api/submissions', 'POST', error)
+    return NextResponse.json({ error: "Internal server error" }, { status: 500 })
+  }
+}

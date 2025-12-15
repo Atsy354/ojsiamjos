@@ -3,6 +3,10 @@
 
 const API_BASE_URL = typeof window !== "undefined" ? window.location.origin : ""
 
+function isFormData(value: any): value is FormData {
+  return typeof FormData !== "undefined" && value instanceof FormData
+}
+
 export interface ApiError {
   error: string
   details?: any
@@ -12,15 +16,11 @@ export async function apiRequest<T>(
   endpoint: string,
   options: RequestInit = {}
 ): Promise<T> {
-  const token = typeof window !== "undefined" ? localStorage.getItem("auth_token") : null
+  const bodyIsFormData = isFormData((options as any).body)
 
   const headers: HeadersInit = {
-    "Content-Type": "application/json",
+    ...(bodyIsFormData ? {} : { "Content-Type": "application/json" }),
     ...options.headers,
-  }
-
-  if (token) {
-    headers["Authorization"] = `Bearer ${token}`
   }
 
   const response = await fetch(`${API_BASE_URL}${endpoint}`, {
@@ -55,10 +55,8 @@ export async function apiRequest<T>(
   if (!response.ok) {
     const errorMsg = data.error || data.message || `API Error: ${response.statusText}`
     const error = new Error(errorMsg)
-    // @ts-ignore
-    error.status = response.status
-    // @ts-ignore
-    error.details = data.details
+    ;(error as any).status = response.status
+    ;(error as any).details = data.details
     throw error
   }
 
@@ -68,14 +66,21 @@ export async function apiRequest<T>(
 export async function apiPost<T>(endpoint: string, body: any): Promise<T> {
   return apiRequest<T>(endpoint, {
     method: "POST",
-    body: JSON.stringify(body),
+    body: isFormData(body) ? body : JSON.stringify(body),
   })
 }
 
 export async function apiPut<T>(endpoint: string, body: any): Promise<T> {
   return apiRequest<T>(endpoint, {
     method: "PUT",
-    body: JSON.stringify(body),
+    body: isFormData(body) ? body : JSON.stringify(body),
+  })
+}
+
+export async function apiPatch<T>(endpoint: string, body: any): Promise<T> {
+  return apiRequest<T>(endpoint, {
+    method: "PATCH",
+    body: isFormData(body) ? body : JSON.stringify(body),
   })
 }
 
@@ -96,8 +101,6 @@ export async function apiUploadFile(
   file: File,
   additionalData?: Record<string, string>
 ): Promise<any> {
-  const token = typeof window !== "undefined" ? localStorage.getItem("auth_token") : null
-
   const formData = new FormData()
   formData.append("file", file)
   
@@ -107,14 +110,8 @@ export async function apiUploadFile(
     })
   }
 
-  const headers: HeadersInit = {}
-  if (token) {
-    headers["Authorization"] = `Bearer ${token}`
-  }
-
   const response = await fetch(`${API_BASE_URL}${endpoint}`, {
     method: "POST",
-    headers,
     body: formData,
   })
 

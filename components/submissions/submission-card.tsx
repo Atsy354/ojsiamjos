@@ -12,29 +12,25 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
-import type { Submission, SubmissionStatus } from "@/lib/types"
+import type { Submission } from "@/lib/types"
 import Link from "next/link"
+import { getSubmissionStatusColors, getStatusBadgeVariant } from "@/lib/ui/status-colors"
+import { getStatusDisplayLabel } from "@/lib/utils/status-helpers"
 
 interface SubmissionCardProps {
   submission: Submission
   onDelete?: (id: string) => void
 }
 
-const statusConfig: Record<
-  SubmissionStatus,
-  { label: string; variant: "default" | "secondary" | "destructive" | "outline" }
-> = {
-  incomplete: { label: "Incomplete", variant: "outline" },
-  submitted: { label: "Submitted", variant: "secondary" },
-  under_review: { label: "Under Review", variant: "default" },
-  revision_required: { label: "Revision Required", variant: "destructive" },
-  accepted: { label: "Accepted", variant: "default" },
-  declined: { label: "Declined", variant: "destructive" },
-  published: { label: "Published", variant: "default" },
-}
-
 export function SubmissionCard({ submission, onDelete }: SubmissionCardProps) {
-  const status = statusConfig[submission.status]
+  // Defensive: skip if no ID
+  if (!submission?.id) {
+    console.warn('[SubmissionCard] Skipping submission with no ID:', submission)
+    return null
+  }
+
+  const statusColors = getSubmissionStatusColors(submission.status, submission.stageId)
+  const statusLabel = statusColors.label || getStatusDisplayLabel(submission.status)
   const timeAgo = submission.dateSubmitted
     ? formatDistanceToNow(new Date(submission.dateSubmitted), { addSuffix: true })
     : "Not submitted"
@@ -45,18 +41,12 @@ export function SubmissionCard({ submission, onDelete }: SubmissionCardProps) {
         <div className="flex-1 space-y-1 min-w-0">
           <div className="flex items-center gap-2 flex-wrap">
             <Badge
-              variant={status.variant}
-              className={
-                submission.status === "accepted"
-                  ? "bg-success text-success-foreground"
-                  : submission.status === "under_review"
-                    ? "bg-primary text-primary-foreground"
-                    : undefined
-              }
+              variant={getStatusBadgeVariant(submission.status)}
+              className={statusColors.badge}
             >
-              {status.label}
+              {statusLabel}
             </Badge>
-            <span className="text-xs text-muted-foreground shrink-0">ID: {submission.id.slice(-6)}</span>
+            <span className="text-xs text-muted-foreground shrink-0">ID: {String(submission.id).slice(-6)}</span>
           </div>
           <Link href={`/submissions/${submission.id}`} className="block">
             <h3 className="line-clamp-2 text-sm sm:text-base font-semibold leading-tight text-foreground hover:text-primary">
@@ -85,7 +75,7 @@ export function SubmissionCard({ submission, onDelete }: SubmissionCardProps) {
               </Link>
             </DropdownMenuItem>
             <DropdownMenuSeparator />
-            <DropdownMenuItem className="text-destructive" onClick={() => onDelete?.(submission.id)}>
+            <DropdownMenuItem className="text-destructive" onClick={() => onDelete?.(String(submission.id))}>
               <Trash2 className="mr-2 h-4 w-4" />
               Delete
             </DropdownMenuItem>
@@ -96,14 +86,14 @@ export function SubmissionCard({ submission, onDelete }: SubmissionCardProps) {
         <p className="line-clamp-2 text-xs sm:text-sm text-muted-foreground leading-relaxed">{submission.abstract}</p>
 
         <div className="flex flex-wrap gap-1.5">
-          {submission.keywords.slice(0, 3).map((keyword) => (
+          {(submission.keywords || []).slice(0, 3).map((keyword) => (
             <Badge key={keyword} variant="outline" className="text-xs truncate max-w-[100px]">
               {keyword}
             </Badge>
           ))}
-          {submission.keywords.length > 3 && (
+          {(submission.keywords?.length || 0) > 3 && (
             <Badge variant="outline" className="text-xs shrink-0">
-              +{submission.keywords.length - 3}
+              +{(submission.keywords?.length || 0) - 3}
             </Badge>
           )}
         </div>
@@ -113,7 +103,7 @@ export function SubmissionCard({ submission, onDelete }: SubmissionCardProps) {
             <span className="flex items-center gap-1">
               <Users className="h-3.5 w-3.5 shrink-0" />
               <span className="whitespace-nowrap">
-                {submission.authors.length} author{submission.authors.length !== 1 ? "s" : ""}
+                {(submission.authors?.length || 0)} author{(submission.authors?.length || 0) !== 1 ? "s" : ""}
               </span>
             </span>
             <span className="flex items-center gap-1">

@@ -1,4 +1,4 @@
-import { createRouteHandlerClient } from '@/lib/supabase/server';
+import { createClient } from '@/lib/supabase/server';
 import { NextResponse } from 'next/server';
 
 import { getContextId } from '@/lib/utils/context';
@@ -7,7 +7,7 @@ export const dynamic = 'force-dynamic';
 
 // GET: Fetch all settings for the current journal
 export async function GET(request: Request) {
-    const supabase = await createRouteHandlerClient();
+    const supabase = await createClient();
     const journalId = await getContextId();
 
     // Fetch all settings
@@ -35,12 +35,12 @@ export async function GET(request: Request) {
 
 // POST: Update specific settings
 export async function POST(request: Request) {
-    const supabase = await createRouteHandlerClient();
+    const supabase = await createClient();
     const updates = await request.json(); // Expected: { name: "New Name", contactEmail: "..." }
     const journalId = await getContextId();
 
-    const { data: session } = await supabase.auth.getSession();
-    if (!session.session) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    const { data: { user: authUser }, error: authUserError } = await supabase.auth.getUser();
+    if (authUserError || !authUser) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
 
     // Arrays to batch upsert
     const upsertData: any[] = [];

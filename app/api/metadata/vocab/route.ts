@@ -1,4 +1,4 @@
-import { createRouteHandlerClient } from '@/lib/supabase/server';
+import { createClient } from '@/lib/supabase/server';
 import { NextResponse } from 'next/server';
 import { MetadataService } from '@/lib/services/metadata.service';
 import { getContextId } from '@/lib/utils/context';
@@ -13,7 +13,7 @@ export async function GET(request: Request) {
         return NextResponse.json({ error: 'Symbolic required' }, { status: 400 });
     }
 
-    const supabase = await createRouteHandlerClient();
+    const supabase = await createClient();
     const contextId = await getContextId();
     const service = new MetadataService(supabase);
 

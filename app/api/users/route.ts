@@ -1,61 +1,58 @@
-// app/api/users/route.ts
 import { NextRequest, NextResponse } from "next/server"
-import { authMiddleware, AuthRequest, requireRole } from "@/lib/auth/middleware"
-import { prisma } from "@/lib/prisma"
+import { createClient } from "@/lib/supabase/server"
+import { requireAdmin } from "@/lib/middleware/auth"
+import { transformFromDB } from "@/lib/utils/transform"
 
-export const GET = requireRole(["admin", "editor"])(async (req: AuthRequest) => {
+// GET /api/users - List users
+export async function GET(request: NextRequest) {
   try {
-    const { searchParams } = new URL(req.url)
-    const journalId = searchParams.get("journalId")
-    const role = searchParams.get("role")
-    const search = searchParams.get("search")
-
-    const where: any = {}
-
-    if (journalId) where.journalId = journalId
-    if (role) where.roles = { has: role }
-
-    if (search) {
-      where.OR = [
-        { email: { contains: search, mode: "insensitive" } },
-        { firstName: { contains: search, mode: "insensitive" } },
-        { lastName: { contains: search, mode: "insensitive" } },
-      ]
+    // Admin-only endpoint
+    const { authorized, error: authError } = await requireAdmin(request)
+    if (!authorized) {
+      return NextResponse.json({ error: authError || "Forbidden" }, { status: 403 })
     }
 
-    const users = await prisma.user.findMany({
-      where,
-      select: {
-        id: true,
-        email: true,
-        firstName: true,
-        lastName: true,
-        affiliation: true,
-        orcid: true,
-        roles: true,
-        avatar: true,
-        journalId: true,
-        createdAt: true,
-        _count: {
-          select: {
-            submissions: true,
-            reviewAssignments: true,
-          },
-        },
-      },
-      orderBy: {
-        createdAt: "desc",
-      },
-      take: 100, // Limit to prevent large responses
-    })
+    const supabase = await createClient()
+    const { searchParams } = new URL(request.url)
+    const role = searchParams.get("role")
+    const pageParam = searchParams.get("page")
+    const pageSizeParam = searchParams.get("pageSize")
+    const page = Math.max(1, parseInt(pageParam || "1", 10))
+    const pageSize = Math.min(100, Math.max(1, parseInt(pageSizeParam || "25", 10)))
+    const from = (page - 1) * pageSize
+    const to = from + pageSize - 1
 
-    return NextResponse.json(users)
-  } catch (error: any) {
+    let query = supabase
+      .from("users")
+      .select("id, email, first_name, last_name, roles, created_at", { count: "exact" })
+      .order("created_at", { ascending: false })
+      .range(from, to)
+
+    if (role) {
+      query = query.contains("roles", [role])
+    }
+
+    const { data: users, error, count } = await query
+
+    if (error) {
+      return NextResponse.json(
+        { error: error.message },
+        { status: 500 }
+      )
+    }
+
+    const transformedUsers = transformFromDB(users)
+    return NextResponse.json({
+      data: transformedUsers,
+      page,
+      pageSize,
+      total: count ?? 0,
+    })
+  } catch (error) {
     console.error("Get users error:", error)
     return NextResponse.json(
-      { error: "Failed to fetch users" },
+      { error: "Internal server error" },
       { status: 500 }
     )
   }
-})
-
+}

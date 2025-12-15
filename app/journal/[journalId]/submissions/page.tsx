@@ -4,7 +4,7 @@ import { useEffect, useState } from "react"
 import { useParams } from "next/navigation"
 import { DashboardLayout } from "@/components/layout/dashboard-layout"
 import { SubmissionList } from "@/components/submissions/submission-list"
-import { initializeStorage, submissionService, journalService } from "@/lib/storage"
+import { apiDelete, apiGet } from "@/lib/api/client"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import type { Submission, Journal } from "@/lib/types"
 
@@ -17,27 +17,43 @@ export default function JournalSubmissionsPage() {
   const [isLoading, setIsLoading] = useState(true)
 
   useEffect(() => {
-    initializeStorage()
     setMounted(true)
-
-    // Find journal by path or id
-    const journals = journalService.getAll()
-    const foundJournal = journals.find((j) => j.path === journalId || j.id === journalId)
-    setJournal(foundJournal || null)
-
-    if (foundJournal) {
-      // Filter submissions for this journal
-      const allSubmissions = submissionService.getAll()
-      const journalSubmissions = allSubmissions.filter((s) => s.journalId === foundJournal.id)
-      setSubmissions(journalSubmissions)
-    }
-
-    setIsLoading(false)
+    void loadData()
   }, [journalId])
 
+  const loadData = async () => {
+    setIsLoading(true)
+    try {
+      const journals = await apiGet<Journal[]>("/api/journals")
+      const foundJournal = Array.isArray(journals)
+        ? journals.find((j: any) => String((j as any).path) === String(journalId) || String((j as any).id) === String(journalId))
+        : null
+      setJournal(foundJournal || null)
+
+      if (foundJournal) {
+        const id = (foundJournal as any).journal_id || (foundJournal as any).id
+        const subs = await apiGet<Submission[]>(`/api/submissions?journalId=${id}`)
+        setSubmissions(Array.isArray(subs) ? subs : [])
+      } else {
+        setSubmissions([])
+      }
+    } catch (e) {
+      console.error("Failed to load journal submissions:", e)
+      setSubmissions([])
+    } finally {
+      setIsLoading(false)
+    }
+  }
+
   const handleDelete = (id: string) => {
-    submissionService.delete(id)
-    setSubmissions((prev) => prev.filter((s) => s.id !== id))
+    void (async () => {
+      try {
+        await apiDelete(`/api/submissions/${id}`)
+        setSubmissions((prev) => prev.filter((s) => String(s.id) !== String(id)))
+      } catch (e) {
+        console.error("Failed to delete submission:", e)
+      }
+    })()
   }
 
   if (!mounted || isLoading) {

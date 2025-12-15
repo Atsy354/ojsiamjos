@@ -121,9 +121,9 @@ if (hasError) {
 } else {
   console.log('✅ Semua environment variables sudah di-set dengan benar!');
   console.log('\nLangkah selanjutnya:');
-  console.log('1. npx prisma generate');
-  console.log('2. npx prisma db push');
-  console.log('3. npm run db:seed');
+  console.log('1. Pastikan Supabase Storage bucket `submissions` sudah dibuat');
+  console.log('2. Jalankan aplikasi: npm run dev');
+  console.log('3. Test autentikasi & upload file dari UI submissions');
 }
 console.log('='.repeat(50));
 

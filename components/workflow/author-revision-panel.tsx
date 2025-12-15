@@ -30,81 +30,130 @@ import {
   Download,
   Trash2,
 } from "lucide-react"
-import {
-  revisionService,
-  type RevisionRequest,
-  type RevisionSubmission,
-  type AuthorResponse,
-} from "@/lib/services/revision-service"
-import { submissionService } from "@/lib/services/submission-service"
-import { userService } from "@/lib/services/user-service"
+import { apiGet, apiPost, apiUploadFile } from "@/lib/api/client"
 import type { Submission, SubmissionFile } from "@/lib/types"
-import { generateId } from "@/lib/services/base"
+import { getRecommendationColors } from "@/lib/ui/status-colors"
 
 interface AuthorRevisionPanelProps {
   submissionId: string
-  onRevisionSubmitted?: () => void
+  onComplete?: () => void
 }
 
-export function AuthorRevisionPanel({ submissionId, onRevisionSubmitted }: AuthorRevisionPanelProps) {
+export function AuthorRevisionPanel({ submissionId, onComplete }: AuthorRevisionPanelProps) {
   const [submission, setSubmission] = useState<Submission | null>(null)
-  const [revisionRequest, setRevisionRequest] = useState<RevisionRequest | null>(null)
-  const [revisionSubmission, setRevisionSubmission] = useState<RevisionSubmission | null>(null)
+  const [revisionRequest, setRevisionRequest] = useState<any | null>(null)
+  const [revisionSubmission, setRevisionSubmission] = useState<any | null>(null)
   const [responseToEditor, setResponseToEditor] = useState("")
-  const [reviewerResponses, setReviewerResponses] = useState<AuthorResponse[]>([])
-  const [uploadedFiles, setUploadedFiles] = useState<SubmissionFile[]>([])
+  const [reviewerResponses, setReviewerResponses] = useState<any[]>([])
+  const [uploadedFiles, setUploadedFiles] = useState<any[]>([])
+  const [existingRevisionFiles, setExistingRevisionFiles] = useState<any[]>([])
   const [isSubmitDialogOpen, setIsSubmitDialogOpen] = useState(false)
   const [activeTab, setActiveTab] = useState("decision")
 
+  const toStrId = (v: any) => (v === null || v === undefined ? "" : String(v))
+
   const loadData = useCallback(() => {
-    const sub = submissionService.getById(submissionId)
-    setSubmission(sub || null)
+    void (async () => {
+      try {
+        const sub = await apiGet<any>(`/api/submissions/${submissionId}`)
+        setSubmission(sub || null)
 
-    const request = revisionService.getRequestBySubmissionId(submissionId)
-    setRevisionRequest(request || null)
+        // Reviewer comments come from review assignments (hide identities like OJS)
+        const reviews = await apiGet<any[]>(`/api/reviews?submissionId=${submissionId}`)
+        const safeReviews = Array.isArray(reviews) ? reviews : []
 
-    if (request) {
-      const existingSubmission = revisionService.getSubmissionByRequestId(request.id)
-      if (existingSubmission) {
-        setRevisionSubmission(existingSubmission)
-        setResponseToEditor(existingSubmission.responseToEditor)
-        setReviewerResponses(existingSubmission.responseToReviewers)
-        setUploadedFiles(existingSubmission.files)
-      } else {
-        // Initialize responses for each reviewer
-        setReviewerResponses(
-          request.reviewerComments.map((rc) => ({
+        // Only show completed reviews with commentsToAuthor, otherwise still allow revision upload
+        const reviewerComments = safeReviews
+          .filter((r: any) => {
+            const completed = Boolean(r?.dateCompleted || r?.date_completed) || String(r?.status).toLowerCase() === "complete"
+            const commentsToAuthor = r?.commentsToAuthor ?? r?.comments_to_author
+            return completed && Boolean(commentsToAuthor)
+          })
+          .map((r: any, idx: number) => ({
+            reviewerId: toStrId(r?.reviewerId ?? r?.reviewer_id ?? r?.reviewer?.id) || `reviewer-${idx}`,
+            dateCompleted: r?.dateCompleted ?? r?.date_completed,
+            recommendation: r?.recommendation ?? r?.recommendation_code ?? "",
+            commentsToAuthor: r?.commentsToAuthor ?? r?.comments_to_author ?? "",
+          }))
+
+        const request = {
+          id: `submission-${submissionId}-revision`,
+          submissionId,
+          status: "pending",
+          decision: "revisions",
+          dateRequested: sub?.dateLastActivity || sub?.dateSubmitted || new Date().toISOString(),
+          dueDate: new Date(Date.now() + 14 * 24 * 60 * 60 * 1000).toISOString(),
+          comments: "",
+          reviewerComments,
+        }
+        setRevisionRequest(request)
+
+        // Initialize responses for each reviewer comment
+        setReviewerResponses((prev: any[]) => {
+          if (Array.isArray(prev) && prev.length > 0) return prev
+          return reviewerComments.map((rc: any) => ({
             reviewerId: rc.reviewerId,
             response: "",
             addressed: false,
-          })),
-        )
+          }))
+        })
+      } catch (e) {
+        console.error("Failed to load revision panel:", e)
+        setSubmission(null)
+        setRevisionRequest(null)
       }
-    }
+    })()
   }, [submissionId])
 
   useEffect(() => {
+    if (!submissionId) return
     loadData()
-  }, [loadData])
+    void loadExistingFiles()
+  }, [submissionId, loadData])
+
+  const loadExistingFiles = async () => {
+    try {
+      const response: any = await apiGet(`/api/submissions/${submissionId}/files?submissionId=${submissionId}`)
+      const list = Array.isArray(response) ? response : (response?.data ?? [])
+      const safe = Array.isArray(list) ? list : []
+
+      const isRevision = (f: any) => {
+        const s = f?.stage ?? f?.fileStage ?? f?.file_stage
+        if (!s) return false
+        if (typeof s === 'string') {
+          const v = s.toLowerCase()
+          // accept both explicit revision + older review-staged revisions
+          return v.includes('revision') || v.includes('revisions') || v === 'review'
+        }
+        // legacy numeric: review stage (3) often used for revisions in older data
+        if (typeof s === 'number') return s === 3
+        return false
+      }
+
+      setExistingRevisionFiles(safe.filter(isRevision))
+    } catch (e) {
+      console.error('Failed to load existing revision files:', e)
+      setExistingRevisionFiles([])
+    }
+  }
 
   const handleFileUpload = () => {
-    // Simulate file upload
-    const newFile: SubmissionFile = {
-      id: generateId(),
-      submissionId,
-      fileName: `Revised_Manuscript_v${(submission?.currentRound || 1) + 1}.docx`,
-      fileType: "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
-      fileSize: Math.floor(Math.random() * 500000) + 100000,
-      fileStage: "submission",
-      uploadedAt: new Date().toISOString(),
-      uploadedBy: userService.getCurrentUser()?.id || "",
-      revision: (submission?.currentRound || 1) + 1,
+    const input = document.createElement("input")
+    input.type = "file"
+    input.multiple = true
+    input.onchange = () => {
+      const files = input.files ? Array.from(input.files) : []
+      if (files.length === 0) return
+      setUploadedFiles((prev) => [...prev, ...files])
     }
-    setUploadedFiles([...uploadedFiles, newFile])
+    input.click()
   }
 
   const handleRemoveFile = (fileId: string) => {
-    setUploadedFiles(uploadedFiles.filter((f) => f.id !== fileId))
+    setUploadedFiles(uploadedFiles.filter((f: any) => {
+      if (f instanceof File) return f.name !== fileId
+      return String(f?.id) !== String(fileId)
+    }))
   }
 
   const handleResponseChange = (reviewerId: string, response: string) => {
@@ -116,55 +165,50 @@ export function AuthorRevisionPanel({ submissionId, onRevisionSubmitted }: Autho
   }
 
   const handleSaveDraft = () => {
-    const currentUser = userService.getCurrentUser()
-    if (!currentUser || !revisionRequest) return
-
-    if (revisionSubmission) {
-      revisionService.updateSubmission(revisionSubmission.id, {
-        responseToEditor,
-        responseToReviewers: reviewerResponses,
-        files: uploadedFiles,
-      })
-    } else {
-      const newSubmission = revisionService.createSubmission({
-        revisionRequestId: revisionRequest.id,
-        submissionId,
-        authorId: currentUser.id,
-        responseToEditor,
-        responseToReviewers: reviewerResponses,
-        files: uploadedFiles,
-        status: "draft",
-      })
-      setRevisionSubmission(newSubmission)
-    }
+    // Mode A: draft is client-side only
+    void revisionSubmission
   }
 
   const handleSubmitRevision = async () => {
-    handleSaveDraft()
-
     try {
-      // Use API to resubmit
-      const { apiPost } = await import("@/lib/api/client")
-      
-      // Update submission status to under_review (creates new review round)
-      await apiPost(`/api/submissions/${submissionId}/resubmit`, {})
-      
-      // Upload files if any
-      for (const file of uploadedFiles) {
-        if (file instanceof File) {
-          const formData = new FormData()
-          formData.append("file", file)
-          formData.append("fileStage", "review")
-          
-          const { apiUploadFile } = await import("@/lib/api/client")
-          await apiUploadFile(`/api/submissions/${submissionId}/files`, file, {
-            fileStage: "review",
-          })
-        }
+      // Upload revision files
+      const filesToUpload = uploadedFiles.filter((f: any) => f instanceof File) as File[]
+      for (const file of filesToUpload) {
+        await apiUploadFile(`/api/submissions/${submissionId}/files`, file, {
+          fileStage: "revision",
+          submissionId: String(submissionId),
+        })
       }
 
+      // Post cover letter + responses (optional but OJS-like)
+      const responsesText = reviewerResponses
+        .map((r: any, idx: number) => {
+          const label = `Reviewer ${String.fromCharCode(65 + idx)}`
+          return `${label}:\n${String(r?.response || "").trim()}`
+        })
+        .filter((t: string) => t.trim().length > 0)
+        .join("\n\n")
+
+      const coverLetter = String(responseToEditor || "").trim()
+      const messageParts = [
+        coverLetter ? `Cover Letter to Editor:\n${coverLetter}` : "",
+        responsesText ? `Responses to Reviewers:\n${responsesText}` : "",
+      ].filter(Boolean)
+
+      if (messageParts.length > 0) {
+        await apiPost("/api/discussions", {
+          submissionId: String(submissionId),
+          message: messageParts.join("\n\n"),
+        })
+      }
+
+      // Resubmit to review
+      await apiPost(`/api/submissions/${submissionId}/resubmit`, {})
+
       setIsSubmitDialogOpen(false)
-      onRevisionSubmitted?.()
+      setUploadedFiles([])
+      await loadExistingFiles()
+      onComplete?.()
     } catch (error: any) {
       console.error("Failed to submit revision:", error)
       alert(error.message || "Failed to submit revision")
@@ -186,38 +230,29 @@ export function AuthorRevisionPanel({ submissionId, onRevisionSubmitted }: Autho
   }
 
   const getDecisionBadge = (decision: string) => {
-    switch (decision) {
-      case "minor_revisions":
-        return (
-          <Badge className="bg-yellow-100 text-yellow-800 dark:bg-yellow-900/30 dark:text-yellow-400">
-            Minor Revisions
-          </Badge>
-        )
-      case "major_revisions":
-        return (
-          <Badge className="bg-orange-100 text-orange-800 dark:bg-orange-900/30 dark:text-orange-400">
-            Major Revisions
-          </Badge>
-        )
-      case "resubmit":
-        return (
-          <Badge className="bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-400">Resubmit for Review</Badge>
-        )
-      default:
-        return <Badge variant="outline">{decision}</Badge>
+    const colors = getRecommendationColors(decision)
+    const labels: Record<string, string> = {
+      minor_revisions: "Minor Revisions",
+      major_revisions: "Major Revisions",
+      resubmit: "Resubmit for Review",
+      accept: "Accept",
+      decline: "Decline",
     }
+    
+    return (
+      <Badge className={colors.badge}>
+        {labels[decision] || decision.replace("_", " ")}
+      </Badge>
+    )
   }
 
-  const canSubmit =
-    responseToEditor.trim().length > 0 &&
-    uploadedFiles.length > 0 &&
-    reviewerResponses.every((r) => r.response.trim().length > 0)
+  const canSubmit = responseToEditor.trim().length > 0 && uploadedFiles.length > 0
 
   if (!revisionRequest) {
     return (
       <Card>
         <CardContent className="py-8 text-center">
-          <CheckCircle2 className="h-12 w-12 mx-auto text-green-500 mb-4" />
+          <CheckCircle2 className="h-12 w-12 mx-auto text-emerald-600 dark:text-emerald-400 mb-4" />
           <p className="text-muted-foreground">No revision requests pending for this submission.</p>
         </CardContent>
       </Card>
@@ -262,7 +297,7 @@ export function AuthorRevisionPanel({ submissionId, onRevisionSubmitted }: Autho
             <TabsTrigger value="decision">Decision</TabsTrigger>
             <TabsTrigger value="reviews">Reviews ({revisionRequest.reviewerComments.length})</TabsTrigger>
             <TabsTrigger value="response">Your Response</TabsTrigger>
-            <TabsTrigger value="files">Files ({uploadedFiles.length})</TabsTrigger>
+            <TabsTrigger value="files">Files ({existingRevisionFiles.length + uploadedFiles.length})</TabsTrigger>
           </TabsList>
 
           <TabsContent value="decision" className="mt-4 space-y-4">
@@ -396,30 +431,56 @@ export function AuthorRevisionPanel({ submissionId, onRevisionSubmitted }: Autho
           </TabsContent>
 
           <TabsContent value="files" className="mt-4 space-y-4">
-            {!isSubmitted && (
-              <div className="border-2 border-dashed rounded-lg p-8 text-center">
-                <Upload className="h-8 w-8 mx-auto text-muted-foreground mb-2" />
-                <p className="text-sm text-muted-foreground mb-4">
-                  Upload your revised manuscript and any supplementary files
-                </p>
-                <Button onClick={handleFileUpload}>
-                  <Upload className="h-4 w-4 mr-2" />
-                  Upload Revised Manuscript
-                </Button>
+            <div className="border-2 border-dashed rounded-lg p-6 text-center">
+              <Upload className="h-8 w-8 mx-auto text-muted-foreground mb-2" />
+              <p className="text-sm text-muted-foreground mb-3">Upload revised manuscript (PDF/DOCX)</p>
+              <Button variant="outline" onClick={handleFileUpload}>
+                <Upload className="h-4 w-4 mr-2" />
+                Select Files
+              </Button>
+            </div>
+
+            {existingRevisionFiles.length > 0 && (
+              <div className="space-y-2">
+                <Label className="text-sm font-medium">Existing Revision Files</Label>
+                {existingRevisionFiles.map((file: any, idx: number) => {
+                  const fileId = file?.fileId ?? file?.file_id ?? file?.id
+                  const href = fileId ? `/api/submissions/${submissionId}/files/${fileId}/download` : null
+                  const name = file?.originalFileName || file?.original_file_name || file?.file_name || file?.fileName || 'File'
+                  return (
+                    <div key={fileId ?? `existing-${idx}`} className="flex items-center justify-between p-3 border rounded-lg">
+                      <div className="flex items-center gap-3">
+                        <FileText className="h-5 w-5 text-muted-foreground" />
+                        <div>
+                          <p className="font-medium text-sm">{name}</p>
+                          <p className="text-xs text-muted-foreground">{String(file?.stage ?? file?.fileStage ?? file?.file_stage ?? 'revision')}</p>
+                        </div>
+                      </div>
+                      {href && (
+                        <Button variant="ghost" size="sm" asChild>
+                          <a href={href} target="_blank" rel="noreferrer">
+                            <Download className="h-4 w-4" />
+                          </a>
+                        </Button>
+                      )}
+                    </div>
+                  )
+                })}
               </div>
             )}
-
             {uploadedFiles.length > 0 && (
               <div className="space-y-2">
                 <Label className="text-sm font-medium">Uploaded Files</Label>
                 {uploadedFiles.map((file) => (
-                  <div key={file.id} className="flex items-center justify-between p-3 border rounded-lg">
+                  <div key={file instanceof File ? file.name : file.id} className="flex items-center justify-between p-3 border rounded-lg">
                     <div className="flex items-center gap-3">
                       <FileText className="h-5 w-5 text-muted-foreground" />
                       <div>
-                        <p className="font-medium text-sm">{file.fileName}</p>
+                        <p className="font-medium text-sm">{file instanceof File ? file.name : file.fileName}</p>
                         <p className="text-xs text-muted-foreground">
-                          {formatFileSize(file.fileSize)} • Uploaded {formatDate(file.uploadedAt)}
+                          {file instanceof File
+                            ? `${formatFileSize(file.size)} • Ready to upload`
+                            : `${formatFileSize(file.fileSize)} • Uploaded ${formatDate(file.uploadedAt)}`}
                         </p>
                       </div>
                     </div>
@@ -428,7 +489,7 @@ export function AuthorRevisionPanel({ submissionId, onRevisionSubmitted }: Autho
                         <Download className="h-4 w-4" />
                       </Button>
                       {!isSubmitted && (
-                        <Button variant="ghost" size="sm" onClick={() => handleRemoveFile(file.id)}>
+                        <Button variant="ghost" size="sm" onClick={() => handleRemoveFile(file instanceof File ? file.name : file.id)}>
                           <Trash2 className="h-4 w-4 text-destructive" />
                         </Button>
                       )}

@@ -1,17 +1,23 @@
 // OJS Core Types based on PKP Architecture
 
 export type UserRole =
-  | "admin"
-  | "editor"
-  | "author"
-  | "reviewer"
-  | "reader"
-  | "copyeditor"
-  | "proofreader"
-  | "layout_editor"
-  | "subscription_manager"
+  | "admin"           // Site Administrator (ROLE_ID_SITE_ADMIN = 1)
+  | "manager"         // Journal Manager (ROLE_ID_MANAGER = 16) - OJS PKP 3.3
+  | "editor"          // Section Editor (ROLE_ID_SUB_EDITOR = 17)
+  | "author"          // Author (ROLE_ID_AUTHOR = 65536)
+  | "reviewer"        // Reviewer (ROLE_ID_REVIEWER = 4096)
+  | "reader"          // Reader (ROLE_ID_READER = 1048576)
+  | "copyeditor"      // Copyeditor (ROLE_ID_ASSISTANT variant)
+  | "proofreader"     // Proofreader (ROLE_ID_ASSISTANT variant)
+  | "layout_editor"   // Layout Editor (ROLE_ID_ASSISTANT variant)
+  | "assistant"       // Journal Assistant (ROLE_ID_ASSISTANT = 4097)
+  | "subscription_manager" // Subscription Manager (ROLE_ID_SUBSCRIPTION_MANAGER = 2097152)
 
-export type SubmissionStatus =
+// OJS Status (INTEGER) - Primary status system
+export type SubmissionStatusOJS = 1 | 3 | 4 | 5 // STATUS_QUEUED | STATUS_PUBLISHED | STATUS_DECLINED | STATUS_SCHEDULED
+
+// Legacy string status - for backward compatibility during migration
+export type SubmissionStatusLegacy =
   | "incomplete"
   | "submitted"
   | "under_review"
@@ -23,6 +29,9 @@ export type SubmissionStatus =
   | "proofreading"
   | "production"
   | "scheduled"
+
+// Combined type - supports both during migration
+export type SubmissionStatus = SubmissionStatusOJS | SubmissionStatusLegacy
 
 export type ReviewStatus = "pending" | "accepted" | "declined" | "completed"
 
@@ -91,14 +100,14 @@ export interface Submission {
   title: string
   abstract: string
   keywords: string[]
-  status: SubmissionStatus
+  status: SubmissionStatus // OJS: INTEGER (1,3,4,5) | Legacy: string (during migration)
   submitterId: string
   authors: Author[]
   files: SubmissionFile[]
   dateSubmitted?: string
   dateStatusModified?: string
   locale: string
-  stageId: number
+  stageId: number // OJS Workflow Stage ID (1-5)
   currentRound: number
   // Rich content fields for published articles
   sections?: ArticleSection[]
@@ -154,7 +163,7 @@ export interface EditorialDecision {
   submissionId: string
   reviewRoundId?: string
   editorId: string
-  decision: "accept" | "decline" | "request_revisions" | "send_to_review" | "send_to_copyediting" | "send_to_production"
+  decision: number // OJS Decision constant (SUBMISSION_EDITOR_DECISION_*)
   dateDecided: string
   comments?: string
 }

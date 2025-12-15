@@ -1,154 +1,121 @@
-// app/api/issues/route.ts
 import { NextRequest, NextResponse } from "next/server"
-import { authMiddleware, AuthRequest, requireRole } from "@/lib/auth/middleware"
-import { prisma } from "@/lib/prisma"
-import { z } from "zod"
+import { createClient } from "@/lib/supabase/server"
+import { requireEditor } from "@/lib/middleware/auth"
+import { getContextId } from "@/lib/utils/context"
+import { transformFromDB } from "@/lib/utils/transform"
 
-const createIssueSchema = z.object({
-  journalId: z.string().min(1, "Journal ID is required"),
-  volume: z.number().int().min(1),
-  number: z.number().int().min(1),
-  year: z.number().int().min(1900).max(2100),
-  title: z.string().optional(),
-  description: z.string().optional(),
-  coverImage: z.string().optional(),
-  datePublished: z.string().datetime().optional(),
-  isPublished: z.boolean().default(false),
-  isCurrent: z.boolean().default(false),
-})
-
-export const GET = authMiddleware(async (req: AuthRequest) => {
+// GET /api/issues - List issues
+export async function GET(request: NextRequest) {
   try {
-    const { searchParams } = new URL(req.url)
-    const journalId = searchParams.get("journalId")
-    const isPublished = searchParams.get("isPublished")
-    const isCurrent = searchParams.get("isCurrent")
+    const supabase = await createClient()
+    const { searchParams } = new URL(request.url)
+    const status = searchParams.get("status")
+    const journalIdParam = searchParams.get("journalId")
 
-    const where: any = {}
+    // Use journalId from query param or context
+    let journalId: number | null = null
+    if (journalIdParam && journalIdParam !== "undefined" && journalIdParam !== "null") {
+      const parsed = parseInt(journalIdParam)
+      if (!isNaN(parsed) && parsed > 0) {
+        journalId = parsed
+      }
+    }
 
-    if (journalId) where.journalId = journalId
-    if (isPublished !== null) where.isPublished = isPublished === "true"
-    if (isCurrent !== null) where.isCurrent = isCurrent === "true"
+    if (!journalId) {
+      journalId = await getContextId()
+    }
 
-    const issues = await prisma.issue.findMany({
-      where,
-      include: {
-        journal: {
-          select: {
-            id: true,
-            name: true,
-            path: true,
-          },
-        },
-        _count: {
-          select: {
-            publications: true,
-          },
-        },
-      },
-      orderBy: [
-        { year: "desc" },
-        { volume: "desc" },
-        { number: "desc" },
-      ],
-    })
+    if (!journalId || journalId <= 0) {
+      return NextResponse.json({ error: "Invalid journal context" }, { status: 400 })
+    }
 
-    return NextResponse.json(issues)
-  } catch (error: any) {
+    let query = supabase
+      .from("issues")
+      .select("*")
+      .eq("journal_id", journalId)
+      .order("date_published", { ascending: false })
+
+    if (status) {
+      query = query.eq("status", status)
+    }
+
+    const { data: issues, error } = await query
+
+    if (error) {
+      return NextResponse.json(
+        { error: error.message },
+        { status: 500 }
+      )
+    }
+
+    const transformed = transformFromDB(issues || [])
+    return NextResponse.json(transformed)
+  } catch (error) {
     console.error("Get issues error:", error)
     return NextResponse.json(
-      { error: "Failed to fetch issues" },
+      { error: "Internal server error" },
       { status: 500 }
     )
   }
-})
+}
 
-export const POST = requireRole(["admin", "editor"])(async (req: AuthRequest) => {
+// POST /api/issues - Create new issue
+export async function POST(request: NextRequest) {
   try {
-    const body = await req.json()
-    const data = createIssueSchema.parse(body)
-
-    // Verify journal exists
-    const journal = await prisma.journal.findUnique({
-      where: { id: data.journalId },
-    })
-
-    if (!journal) {
-      return NextResponse.json(
-        { error: "Journal not found" },
-        { status: 404 }
-      )
+    const { authorized, error: authError } = await requireEditor(request)
+    if (!authorized) {
+      return NextResponse.json({ error: authError || "Forbidden" }, { status: 403 })
     }
 
-    // Check if issue with same volume/number/year already exists
-    const existingIssue = await prisma.issue.findUnique({
-      where: {
-        journalId_volume_number_year: {
-          journalId: data.journalId,
-          volume: data.volume,
-          number: data.number,
-          year: data.year,
-        },
-      },
-    })
+    const body = await request.json()
+    const supabase = await createClient()
+    // Prefer explicit journalId from body (UI often knows the current journal).
+    // Fallback to contextual resolution.
+    const journalIdFromBodyRaw = body?.journalId
+    const journalIdFromBody = journalIdFromBodyRaw ? parseInt(String(journalIdFromBodyRaw)) : NaN
+    const journalId = !isNaN(journalIdFromBody) && journalIdFromBody > 0 ? journalIdFromBody : await getContextId()
 
-    if (existingIssue) {
+    const { volume, number, year, title, description } = body
+
+    if (!journalId || journalId <= 0) {
+      return NextResponse.json({ error: "Invalid journal context" }, { status: 400 })
+    }
+
+    if (!volume || !number || !year) {
       return NextResponse.json(
-        { error: "Issue with this volume, number, and year already exists" },
+        { error: "Volume, number, and year are required" },
         { status: 400 }
       )
     }
 
-    // If setting as current, unset other current issues for this journal
-    if (data.isCurrent) {
-      await prisma.issue.updateMany({
-        where: {
-          journalId: data.journalId,
-          isCurrent: true,
-        },
-        data: {
-          isCurrent: false,
-        },
+    const { data: issue, error } = await supabase
+      .from("issues")
+      .insert({
+        journal_id: journalId,
+        volume,
+        number,
+        year,
+        title: title || `Vol ${volume} No ${number} (${year})`,
+        description: description || "",
+        status: "unpublished",
       })
-    }
+      .select()
+      .single()
 
-    const issue = await prisma.issue.create({
-      data: {
-        journalId: data.journalId,
-        volume: data.volume,
-        number: data.number,
-        year: data.year,
-        title: data.title,
-        description: data.description,
-        coverImage: data.coverImage,
-        datePublished: data.datePublished ? new Date(data.datePublished) : null,
-        isPublished: data.isPublished,
-        isCurrent: data.isCurrent,
-      },
-      include: {
-        journal: {
-          select: {
-            id: true,
-            name: true,
-          },
-        },
-      },
-    })
-
-    return NextResponse.json(issue, { status: 201 })
-  } catch (error: any) {
-    if (error instanceof z.ZodError) {
+    if (error) {
       return NextResponse.json(
-        { error: "Invalid input", details: error.errors },
-        { status: 400 }
+        { error: error.message },
+        { status: 500 }
       )
     }
 
+    const transformed = transformFromDB(issue)
+    return NextResponse.json(transformed, { status: 201 })
+  } catch (error) {
     console.error("Create issue error:", error)
     return NextResponse.json(
-      { error: "Failed to create issue" },
+      { error: "Internal server error" },
       { status: 500 }
     )
   }
-})
-
+}

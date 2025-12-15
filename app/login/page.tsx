@@ -5,157 +5,18 @@ import type React from "react"
 import { useState } from "react"
 import { useRouter } from "next/navigation"
 import Link from "next/link"
-import { useAuth } from "@/lib/hooks/use-auth"
-import { journalService } from "@/lib/services/journal-service"
 import { ROUTES } from "@/lib/constants"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Card } from "@/components/ui/card"
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
-import { AlertCircle, BookOpen, ArrowLeft, Shield, Edit3, FileText, Eye, Users, Building2 } from "lucide-react"
-
-const journalCredentials = {
-  platform: {
-    name: "Platform Admin",
-    acronym: "SYSTEM",
-    color: "bg-slate-800",
-    journalPath: null,
-    users: [
-      { role: "Administrator", email: "admin@iamjos.org", icon: Shield, color: "text-red-500" },
-      { role: "Reader", email: "reader@iamjos.org", icon: Users, color: "text-amber-500" },
-    ],
-  },
-  jcst: {
-    name: "Computer Science & Technology",
-    acronym: "JCST",
-    color: "bg-blue-600",
-    journalPath: "jcst",
-    users: [
-      { role: "Editor", email: "editor@jcst.org", icon: Edit3, color: "text-blue-500" },
-      { role: "Author", email: "author@jcst.org", icon: FileText, color: "text-green-500" },
-      { role: "Reviewer", email: "reviewer@jcst.org", icon: Eye, color: "text-purple-500" },
-    ],
-  },
-  ijms: {
-    name: "Medical Sciences",
-    acronym: "IJMS",
-    color: "bg-red-600",
-    journalPath: "ijms",
-    users: [
-      { role: "Editor", email: "editor@ijms.org", icon: Edit3, color: "text-blue-500" },
-      { role: "Author", email: "author@ijms.org", icon: FileText, color: "text-green-500" },
-      { role: "Reviewer", email: "reviewer@ijms.org", icon: Eye, color: "text-purple-500" },
-    ],
-  },
-  jee: {
-    name: "Environmental Engineering",
-    acronym: "JEE",
-    color: "bg-green-600",
-    journalPath: "jee",
-    users: [
-      { role: "Editor", email: "editor@jee.org", icon: Edit3, color: "text-blue-500" },
-      { role: "Author", email: "author@jee.org", icon: FileText, color: "text-green-500" },
-      { role: "Reviewer", email: "reviewer@jee.org", icon: Eye, color: "text-purple-500" },
-    ],
-  },
-  jbf: {
-    name: "Business & Finance",
-    acronym: "JBF",
-    color: "bg-amber-600",
-    journalPath: "jbf",
-    users: [
-      { role: "Editor", email: "editor@jbf.org", icon: Edit3, color: "text-blue-500" },
-      { role: "Author", email: "author@jbf.org", icon: FileText, color: "text-green-500" },
-      { role: "Reviewer", email: "reviewer@jbf.org", icon: Eye, color: "text-purple-500" },
-    ],
-  },
-  jedu: {
-    name: "Education & Learning",
-    acronym: "JEDU",
-    color: "bg-purple-600",
-    journalPath: "jedu",
-    users: [
-      { role: "Editor", email: "editor@jedu.org", icon: Edit3, color: "text-blue-500" },
-      { role: "Author", email: "author@jedu.org", icon: FileText, color: "text-green-500" },
-      { role: "Reviewer", email: "reviewer@jedu.org", icon: Eye, color: "text-purple-500" },
-    ],
-  },
-}
+import { AlertCircle, BookOpen, ArrowLeft, CheckCircle2, Copy } from "lucide-react"
 
 export default function LoginPage() {
   const router = useRouter()
-  const { login, setCurrentJournal } = useAuth()
   const [email, setEmail] = useState("")
   const [password, setPassword] = useState("")
   const [error, setError] = useState("")
   const [isLoading, setIsLoading] = useState(false)
-
-  const handleQuickLogin = async (userEmail: string, journalPath: string | null) => {
-    setError("")
-    setIsLoading(true)
-    setEmail(userEmail)
-
-    try {
-      // Try API login with default password for demo users
-      // Password format: {role}123 (e.g., admin123, editor123, author123, reviewer123)
-      const passwordMap: Record<string, string> = {
-        "admin@iamjos.org": "admin123",
-        "editor@jcst.org": "editor123",
-        "author@jcst.org": "author123",
-        "reviewer@jcst.org": "reviewer123",
-        "reviewer2@jcst.org": "reviewer123",
-      }
-      
-      const password = passwordMap[userEmail] || "demo123"
-      
-      try {
-        const response = await fetch("/api/auth/login", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ 
-            email: userEmail, 
-            password: password
-          }),
-        })
-
-        if (response.ok) {
-          const data = await response.json()
-          // Save token to localStorage
-          if (typeof window !== "undefined" && data.token) {
-            localStorage.setItem("auth_token", data.token)
-            localStorage.setItem("current_user", JSON.stringify(data.user))
-          }
-        }
-      } catch (apiErr) {
-        console.error("API login error:", apiErr)
-        // Continue with localStorage login
-      }
-
-      const user = await login(userEmail)
-      if (user) {
-        if (journalPath) {
-          const journal = journalService.getByPath(journalPath)
-          if (journal) {
-            setCurrentJournal(journal)
-          }
-        }
-
-        if (user.roles.includes("admin") && !journalPath) {
-          router.push(ROUTES.ADMIN)
-        } else if (journalPath) {
-          router.push(ROUTES.journalDashboard(journalPath))
-        } else {
-          router.push(ROUTES.DASHBOARD)
-        }
-      } else {
-        setError("Invalid credentials. Please try again.")
-      }
-    } catch (err) {
-      setError("An error occurred during login.")
-    } finally {
-      setIsLoading(false)
-    }
-  }
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -163,56 +24,67 @@ export default function LoginPage() {
     setIsLoading(true)
 
     try {
-      // Try API login first
-      if (password) {
-        try {
-          const response = await fetch("/api/auth/login", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ email, password }),
-          })
+      console.log('[Login] Starting login for:', email)
+      console.log('[Login] Origin:', typeof window !== 'undefined' ? window.location.origin : 'server')
+      
+      // Strict login with email + password using API
+      const endpoint = "/api/auth/login"
+      const response = await fetch(endpoint, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email, password }),
+      })
 
-          if (response.ok) {
-            const data = await response.json()
-            // Save token to localStorage
-            if (typeof window !== "undefined" && data.token) {
-              localStorage.setItem("auth_token", data.token)
-              localStorage.setItem("current_user", JSON.stringify(data.user))
-            }
-            // Also set in localStorage-based auth for compatibility
-            const user = await login(email)
-            if (user) {
-              if (user.roles.includes("admin") && !user.journalId) {
-                router.push(ROUTES.ADMIN)
-              } else if (user.journalId) {
-                router.push(ROUTES.journalDashboard(user.journalId))
-              } else {
-                router.push(ROUTES.DASHBOARD)
-              }
-              return
-            }
-          }
-        } catch (apiErr) {
-          console.error("API login error:", apiErr)
-          // Fall through to localStorage login
-        }
+      console.log('[Login] Response status:', response.status)
+
+      if (!response.ok) {
+        const msg = await response.json().catch(() => ({ error: "Login failed" }))
+        setError(msg.error || "Login failed. Please try again.")
+        return
       }
 
-      // Fallback to localStorage-based login (for demo without password)
-      const user = await login(email)
-      if (user) {
-        if (user.roles.includes("admin") && !user.journalId) {
-          router.push(ROUTES.ADMIN)
-        } else if (user.journalId) {
-          router.push(ROUTES.journalDashboard(user.journalId))
-        } else {
-          router.push(ROUTES.DASHBOARD)
-        }
+      const data = await response.json()
+      console.log('[Login] Response data:', data)
+      console.log('[Login] User object:', data.user)
+      console.log('[Login] User roles:', data.user?.roles)
+      console.log('[Login] User role_ids:', data.user?.role_ids)
+
+      // Session is stored in HttpOnly cookies by Supabase SSR helpers.
+      // Do not persist tokens/user in localStorage.
+      if (!data.user) {
+        console.error('[Login] ERROR: No user data in response!')
+        setError("Login failed - no user data received")
+        return
+      }
+
+      // Basic routing after login - role-based redirect (OJS PKP 3.3)
+      const roles: string[] = data?.user?.roles || []
+      console.log('[Login] Redirecting based on roles:', roles)
+      
+      if (roles.includes("admin")) {
+        router.push(ROUTES.ADMIN)
+      } else if (roles.includes("manager")) {
+        // OJS: Manager goes to dashboard (has full editorial access)
+        router.push(ROUTES.DASHBOARD)
+      } else if (roles.includes("editor")) {
+        router.push(ROUTES.DASHBOARD)
+      } else if (roles.includes("author")) {
+        // Authors go to their submissions page
+        router.push(ROUTES.MY_SUBMISSIONS)
+      } else if (roles.includes("reviewer")) {
+        router.push(ROUTES.REVIEWS)
       } else {
-        setError("Invalid email or user not found. Please try again.")
+        router.push(ROUTES.DASHBOARD)
       }
-    } catch (err) {
-      setError("An error occurred during login. Please try again.")
+    } catch (err: any) {
+      console.error('[Login] Error:', err)
+      // Network-level error (server down / unreachable) usually surfaces as TypeError: Failed to fetch
+      const message = String(err?.message || err)
+      if (message.toLowerCase().includes('failed to fetch')) {
+        setError("Failed to connect to server. Pastikan `npm run dev` masih berjalan dan akses via http://localhost:3000 (bukan file:// atau host lain).")
+      } else {
+        setError(message || "An error occurred during login. Please try again.")
+      }
     } finally {
       setIsLoading(false)
     }
@@ -283,7 +155,7 @@ export default function LoginPage() {
                 onChange={(e) => setPassword(e.target.value)}
                 className="h-11"
               />
-              <p className="text-xs text-muted-foreground">Password not required for demo</p>
+              {/* Hint removed to avoid demo confusion */}
             </div>
 
             {error && (
@@ -298,6 +170,8 @@ export default function LoginPage() {
             </Button>
           </form>
 
+          {/* Demo accounts removed to avoid confusion */}
+
           {/* Footer Links */}
           <div className="mt-6 text-center text-sm text-muted-foreground">
             <p>
@@ -310,78 +184,183 @@ export default function LoginPage() {
         </div>
       </div>
 
-      {/* Right Panel - Demo Credentials by Journal */}
-      <div className="hidden lg:flex flex-1 bg-slate-900 p-8 flex-col">
-        <div className="max-w-3xl mx-auto w-full">
-          <div className="mb-6">
-            <h3 className="text-2xl font-bold text-white">Quick Demo Access</h3>
-            <p className="text-slate-400">Select a journal and role to explore the system</p>
+      {/* Right Panel - Registered Accounts Quick Reference (read-only) */}
+      <div className="hidden lg:flex flex-1 bg-slate-900 p-8 flex-col text-slate-100 overflow-y-auto">
+        <div className="max-w-2xl w-full space-y-6">
+          <div>
+            <h3 className="text-2xl font-semibold mb-2">Welcome to IamJOS</h3>
+            <p className="text-slate-300">
+              Sign in with your valid email and password. Below are example accounts that are already
+              registered in this environment (read-only quick reference).
+            </p>
           </div>
 
-          <Tabs defaultValue="platform" className="w-full">
-            <TabsList className="w-full flex-wrap h-auto gap-1 bg-slate-800/50 p-1">
-              {Object.entries(journalCredentials).map(([key, journal]) => (
-                <TabsTrigger
-                  key={key}
-                  value={key}
-                  className="flex-1 min-w-[80px] data-[state=active]:bg-slate-700 text-slate-300 data-[state=active]:text-white text-xs py-2"
-                >
-                  {journal.acronym}
-                </TabsTrigger>
-              ))}
-            </TabsList>
+          {/* Helper: copy email into the email field */}
+          <div className="text-xs text-slate-400 -mt-3">
+            Tip: click an email to auto-fill the email field on the left.
+          </div>
 
-            {Object.entries(journalCredentials).map(([key, journal]) => (
-              <TabsContent key={key} value={key} className="mt-4">
-                <Card className="bg-slate-800/50 border-slate-700 p-4">
-                  <div className="flex items-center gap-3 mb-4">
-                    <div className={`h-10 w-10 rounded-lg ${journal.color} flex items-center justify-center`}>
-                      <Building2 className="h-5 w-5 text-white" />
-                    </div>
-                    <div>
-                      <h4 className="font-semibold text-white">{journal.name}</h4>
-                      <p className="text-xs text-slate-400">{journal.acronym}</p>
-                    </div>
-                  </div>
+          {/* Platform admin */}
+          <div className="rounded-lg border border-slate-700 bg-slate-800/50 p-4">
+            <div className="flex items-center gap-2 mb-2">
+              <CheckCircle2 className="h-4 w-4 text-emerald-400" />
+              <h4 className="font-semibold">Platform Admin</h4>
+            </div>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-sm">
+              <button type="button" onClick={() => setEmail("admin@iamjos.org")}
+                className="group flex items-center justify-between rounded-md bg-slate-900/40 hover:bg-slate-800 px-3 py-2">
+                <span className="truncate">admin@iamjos.org</span>
+                <Copy className="h-3.5 w-3.5 text-slate-400 group-hover:text-slate-200" />
+              </button>
+              <button type="button" onClick={() => setEmail("anjarbdn@gmail.com")}
+                className="group flex items-center justify-between rounded-md bg-slate-900/40 hover:bg-slate-800 px-3 py-2">
+                <span className="truncate">anjarbdn@gmail.com</span>
+                <Copy className="h-3.5 w-3.5 text-slate-400 group-hover:text-slate-200" />
+              </button>
+            </div>
+          </div>
 
-                  <div className="space-y-2">
-                    {journal.users.map((user) => (
-                      <button
-                        key={user.email}
-                        onClick={() => handleQuickLogin(user.email, journal.journalPath)}
-                        disabled={isLoading}
-                        className="w-full flex items-center gap-3 p-3 rounded-lg bg-slate-700/50 hover:bg-slate-700 transition-colors text-left group disabled:opacity-50"
-                      >
-                        <div className={`h-8 w-8 rounded-full bg-slate-600 flex items-center justify-center`}>
-                          <user.icon className={`h-4 w-4 ${user.color}`} />
-                        </div>
-                        <div className="flex-1 min-w-0">
-                          <p className="text-sm font-medium text-white">{user.role}</p>
-                          <p className="text-xs text-slate-400 truncate font-mono">{user.email}</p>
-                        </div>
-                        <span className="text-xs text-slate-500 group-hover:text-slate-300 transition-colors">
-                          Click to login
-                        </span>
-                      </button>
-                    ))}
-                  </div>
-                </Card>
+          {/* Journal Manager */}
+          <div className="rounded-lg border border-slate-700 bg-slate-800/50 p-4">
+            <div className="flex items-center gap-2 mb-2">
+              <CheckCircle2 className="h-4 w-4 text-blue-400" />
+              <h4 className="font-semibold">Journal Manager</h4>
+            </div>
+            <div className="grid grid-cols-1 sm:grid-cols-1 gap-2 text-sm">
+              <button type="button" onClick={() => setEmail("manager@ojs.test")}
+                className="group flex items-center justify-between rounded-md bg-slate-900/40 hover:bg-slate-800 px-3 py-2">
+                <span className="truncate">manager@ojs.test</span>
+                <Copy className="h-3.5 w-3.5 text-slate-400 group-hover:text-slate-200" />
+              </button>
+            </div>
+          </div>
 
-                {key !== "platform" && (
-                  <p className="mt-3 text-xs text-slate-500 text-center">
-                    Each journal has its own Editor, Author, and Reviewer accounts
-                  </p>
-                )}
-              </TabsContent>
-            ))}
-          </Tabs>
+          {/* Journal accounts */}
+          <div className="grid grid-cols-1 gap-4">
+            {/* Default (journal_id = 1) */}
+            <div className="rounded-lg border border-slate-700 bg-slate-800/50 p-4">
+              <div className="flex items-center justify-between mb-2">
+                <h4 className="font-semibold">Journal: default</h4>
+                <span className="text-xs text-slate-400">path: default</span>
+              </div>
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 text-sm">
+                <button type="button" onClick={() => setEmail("editor@jcst.org")}
+                  className="group flex items-center justify-between rounded-md bg-slate-900/40 hover:bg-slate-800 px-3 py-2">
+                  <span className="truncate">editor@jcst.org</span>
+                  <Copy className="h-3.5 w-3.5 text-slate-400 group-hover:text-slate-200" />
+                </button>
+                <button type="button" onClick={() => setEmail("author@jcst.org")}
+                  className="group flex items-center justify-between rounded-md bg-slate-900/40 hover:bg-slate-800 px-3 py-2">
+                  <span className="truncate">author@jcst.org</span>
+                  <Copy className="h-3.5 w-3.5 text-slate-400 group-hover:text-slate-200" />
+                </button>
+                <button type="button" onClick={() => setEmail("reviewer@jcst.org")}
+                  className="group flex items-center justify-between rounded-md bg-slate-900/40 hover:bg-slate-800 px-3 py-2">
+                  <span className="truncate">reviewer@jcst.org</span>
+                  <Copy className="h-3.5 w-3.5 text-slate-400 group-hover:text-slate-200" />
+                </button>
+              </div>
+            </div>
 
-          {/* Help Text */}
-          <div className="mt-6 p-4 bg-slate-800/30 rounded-lg border border-slate-700">
-            <p className="text-sm text-slate-400">
-              <strong className="text-slate-300">Demo Mode:</strong> Each hosted journal has dedicated credentials.
-              Select a journal tab above, then click on a role to instantly login and explore that journal's workflow.
-            </p>
+            {/* IJMS (journal_id = 18) */}
+            <div className="rounded-lg border border-slate-700 bg-slate-800/50 p-4">
+              <div className="flex items-center justify-between mb-2">
+                <h4 className="font-semibold">Journal: ijms</h4>
+                <span className="text-xs text-slate-400">path: ijms</span>
+              </div>
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 text-sm">
+                <button type="button" onClick={() => setEmail("editor@ijms.org")}
+                  className="group flex items-center justify-between rounded-md bg-slate-900/40 hover:bg-slate-800 px-3 py-2">
+                  <span className="truncate">editor@ijms.org</span>
+                  <Copy className="h-3.5 w-3.5 text-slate-400 group-hover:text-slate-200" />
+                </button>
+                <button type="button" onClick={() => setEmail("author@ijms.org")}
+                  className="group flex items-center justify-between rounded-md bg-slate-900/40 hover:bg-slate-800 px-3 py-2">
+                  <span className="truncate">author@ijms.org</span>
+                  <Copy className="h-3.5 w-3.5 text-slate-400 group-hover:text-slate-200" />
+                </button>
+                <button type="button" onClick={() => setEmail("reviewer@ijms.org")}
+                  className="group flex items-center justify-between rounded-md bg-slate-900/40 hover:bg-slate-800 px-3 py-2">
+                  <span className="truncate">reviewer@ijms.org</span>
+                  <Copy className="h-3.5 w-3.5 text-slate-400 group-hover:text-slate-200" />
+                </button>
+              </div>
+            </div>
+
+            {/* JEE (journal_id = 19) */}
+            <div className="rounded-lg border border-slate-700 bg-slate-800/50 p-4">
+              <div className="flex items-center justify-between mb-2">
+                <h4 className="font-semibold">Journal: jee</h4>
+                <span className="text-xs text-slate-400">path: jee</span>
+              </div>
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 text-sm">
+                <button type="button" onClick={() => setEmail("editor@jee.org")}
+                  className="group flex items-center justify-between rounded-md bg-slate-900/40 hover:bg-slate-800 px-3 py-2">
+                  <span className="truncate">editor@jee.org</span>
+                  <Copy className="h-3.5 w-3.5 text-slate-400 group-hover:text-slate-200" />
+                </button>
+                <button type="button" onClick={() => setEmail("author@jee.org")}
+                  className="group flex items-center justify-between rounded-md bg-slate-900/40 hover:bg-slate-800 px-3 py-2">
+                  <span className="truncate">author@jee.org</span>
+                  <Copy className="h-3.5 w-3.5 text-slate-400 group-hover:text-slate-200" />
+                </button>
+                <button type="button" onClick={() => setEmail("reviewer@jee.org")}
+                  className="group flex items-center justify-between rounded-md bg-slate-900/40 hover:bg-slate-800 px-3 py-2">
+                  <span className="truncate">reviewer@jee.org</span>
+                  <Copy className="h-3.5 w-3.5 text-slate-400 group-hover:text-slate-200" />
+                </button>
+              </div>
+            </div>
+
+            {/* JBF (journal_id = 20) */}
+            <div className="rounded-lg border border-slate-700 bg-slate-800/50 p-4">
+              <div className="flex items-center justify-between mb-2">
+                <h4 className="font-semibold">Journal: jbf</h4>
+                <span className="text-xs text-slate-400">path: jbf</span>
+              </div>
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 text-sm">
+                <button type="button" onClick={() => setEmail("editor@jbf.org")}
+                  className="group flex items-center justify-between rounded-md bg-slate-900/40 hover:bg-slate-800 px-3 py-2">
+                  <span className="truncate">editor@jbf.org</span>
+                  <Copy className="h-3.5 w-3.5 text-slate-400 group-hover:text-slate-200" />
+                </button>
+                <button type="button" onClick={() => setEmail("author@jbf.org")}
+                  className="group flex items-center justify-between rounded-md bg-slate-900/40 hover:bg-slate-800 px-3 py-2">
+                  <span className="truncate">author@jbf.org</span>
+                  <Copy className="h-3.5 w-3.5 text-slate-400 group-hover:text-slate-200" />
+                </button>
+                <button type="button" onClick={() => setEmail("reviewer@jbf.org")}
+                  className="group flex items-center justify-between rounded-md bg-slate-900/40 hover:bg-slate-800 px-3 py-2">
+                  <span className="truncate">reviewer@jbf.org</span>
+                  <Copy className="h-3.5 w-3.5 text-slate-400 group-hover:text-slate-200" />
+                </button>
+              </div>
+            </div>
+
+            {/* JEDU (journal_id = 21) */}
+            <div className="rounded-lg border border-slate-700 bg-slate-800/50 p-4">
+              <div className="flex items-center justify-between mb-2">
+                <h4 className="font-semibold">Journal: jedu</h4>
+                <span className="text-xs text-slate-400">path: jedu</span>
+              </div>
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 text-sm">
+                <button type="button" onClick={() => setEmail("editor@jedu.org")}
+                  className="group flex items-center justify-between rounded-md bg-slate-900/40 hover:bg-slate-800 px-3 py-2">
+                  <span className="truncate">editor@jedu.org</span>
+                  <Copy className="h-3.5 w-3.5 text-slate-400 group-hover:text-slate-200" />
+                </button>
+                <button type="button" onClick={() => setEmail("author@jedu.org")}
+                  className="group flex items-center justify-between rounded-md bg-slate-900/40 hover:bg-slate-800 px-3 py-2">
+                  <span className="truncate">author@jedu.org</span>
+                  <Copy className="h-3.5 w-3.5 text-slate-400 group-hover:text-slate-200" />
+                </button>
+                <button type="button" onClick={() => setEmail("reviewer@jedu.org")}
+                  className="group flex items-center justify-between rounded-md bg-slate-900/40 hover:bg-slate-800 px-3 py-2">
+                  <span className="truncate">reviewer@jedu.org</span>
+                  <Copy className="h-3.5 w-3.5 text-slate-400 group-hover:text-slate-200" />
+                </button>
+              </div>
+            </div>
           </div>
         </div>
       </div>

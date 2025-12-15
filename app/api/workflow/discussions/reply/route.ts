@@ -1,4 +1,4 @@
-import { createRouteHandlerClient } from '@/lib/supabase/server';
+import { createClient } from '@/lib/supabase/server';
 import { NextResponse } from 'next/server';
 
 export const dynamic = 'force-dynamic';
@@ -6,16 +6,16 @@ export const dynamic = 'force-dynamic';
 const ASSOC_TYPE_QUERY = 1048586;
 
 export async function POST(request: Request) {
-    const supabase = await createRouteHandlerClient();
+    const supabase = await createClient();
     const { queryId, message } = await request.json();
 
-    const { data: session } = await supabase.auth.getSession();
-    if (!session.session) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    const { data: { user: authUser }, error: authUserError } = await supabase.auth.getUser();
+    if (authUserError || !authUser) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
 
     const { error } = await supabase.from('notes').insert({
         assoc_type: ASSOC_TYPE_QUERY,
         assoc_id: queryId,
-        user_id: session.session.user.id,
+        user_id: authUser.id,
         contents: message
     });
 

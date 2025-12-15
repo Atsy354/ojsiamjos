@@ -46,9 +46,10 @@ export class MetadataService extends BaseService {
 
         // Flatten
         const terms: string[] = [];
-        // @ts-ignore
-        data.entries.forEach((entry: any) => {
-            entry.settings.forEach((s: any) => {
+        const entries = (data as any).entries || [];
+        entries.forEach((entry: any) => {
+            const settings = entry.settings || [];
+            settings.forEach((s: any) => {
                 terms.push(s.setting_value);
             });
         });

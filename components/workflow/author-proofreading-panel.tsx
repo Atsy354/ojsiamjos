@@ -31,10 +31,7 @@ import {
   Plus,
   Trash2,
 } from "lucide-react"
-import { proofreadService } from "@/lib/services/proofread-service"
-import { userService } from "@/lib/services/user-service"
-import type { ProofreadingAssignment, SubmissionFile } from "@/lib/types"
-import { generateId } from "@/lib/services/base"
+import { apiGet, apiPost, apiUploadFile } from "@/lib/api/client"
 
 interface AuthorProofreadingPanelProps {
   submissionId: string
@@ -50,13 +47,16 @@ interface ProofCorrection {
 }
 
 export function AuthorProofreadingPanel({ submissionId, onComplete }: AuthorProofreadingPanelProps) {
-  const [assignment, setAssignment] = useState<ProofreadingAssignment | null>(null)
+  const [proofFiles, setProofFiles] = useState<any[]>([])
   const [corrections, setCorrections] = useState<ProofCorrection[]>([])
   const [authorComments, setAuthorComments] = useState("")
-  const [uploadedFiles, setUploadedFiles] = useState<SubmissionFile[]>([])
+  const [uploadedFiles, setUploadedFiles] = useState<File[]>([])
   const [isAddCorrectionOpen, setIsAddCorrectionOpen] = useState(false)
   const [isSubmitDialogOpen, setIsSubmitDialogOpen] = useState(false)
   const [noCorrectionsNeeded, setNoCorrectionsNeeded] = useState(false)
+  const [isLoading, setIsLoading] = useState(true)
+  const [isUploading, setIsUploading] = useState(false)
+  const [isSubmitting, setIsSubmitting] = useState(false)
 
   // New correction form
   const [newCorrection, setNewCorrection] = useState<Omit<ProofCorrection, "id">>({
@@ -67,22 +67,41 @@ export function AuthorProofreadingPanel({ submissionId, onComplete }: AuthorProo
   })
 
   useEffect(() => {
-    loadData()
+    void loadData()
   }, [submissionId])
 
-  const loadData = () => {
-    const assignments = proofreadService.getBySubmissionId(submissionId)
-    const authorReviewAssignment = assignments.find((a) => a.status === "author_corrections")
-    if (authorReviewAssignment) {
-      setAssignment(authorReviewAssignment)
-      setAuthorComments(authorReviewAssignment.authorCorrections || "")
+  const loadData = async () => {
+    setIsLoading(true)
+    try {
+      const response: any = await apiGet(`/api/submissions/${submissionId}/files?submissionId=${submissionId}`)
+      const list = Array.isArray(response) ? response : (response?.data ?? [])
+      const safe = Array.isArray(list) ? list : []
+
+      const isProof = (f: any) => {
+        const s = f?.stage ?? f?.fileStage ?? f?.file_stage
+        if (!s) return false
+        if (typeof s === 'string') {
+          const v = s.toLowerCase()
+          return v.includes('production') || v.includes('proof') || v.includes('galley')
+        }
+        // legacy numeric: production/proof often maps to 10 in this codebase
+        if (typeof s === 'number') return s === 10
+        return false
+      }
+
+      setProofFiles(safe.filter(isProof))
+    } catch (e) {
+      console.error('Failed to load proof files:', e)
+      setProofFiles([])
+    } finally {
+      setIsLoading(false)
     }
   }
 
   const handleAddCorrection = () => {
     if (!newCorrection.location || !newCorrection.originalText) return
 
-    setCorrections([...corrections, { ...newCorrection, id: generateId() }])
+    setCorrections([...corrections, { ...newCorrection, id: crypto.randomUUID() }])
     setNewCorrection({
       location: "",
       originalText: "",
@@ -97,35 +116,61 @@ export function AuthorProofreadingPanel({ submissionId, onComplete }: AuthorProo
   }
 
   const handleFileUpload = () => {
-    const newFile: SubmissionFile = {
-      id: generateId(),
-      submissionId,
-      fileName: `Author_Proofread_Corrections.docx`,
-      fileType: "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
-      fileSize: Math.floor(Math.random() * 200000) + 50000,
-      fileStage: "proof",
-      uploadedAt: new Date().toISOString(),
-      uploadedBy: userService.getCurrentUser()?.id || "",
+    const input = document.createElement('input')
+    input.type = 'file'
+    input.multiple = true
+    input.onchange = () => {
+      const selected = input.files ? Array.from(input.files) : []
+      if (selected.length === 0) return
+      setUploadedFiles((prev) => [...prev, ...selected])
     }
-    setUploadedFiles([...uploadedFiles, newFile])
+    input.click()
   }
 
   const handleSubmitCorrections = () => {
-    if (!assignment) return
+    void (async () => {
+      setIsSubmitting(true)
+      try {
+        // Upload annotated proof files (optional)
+        if (uploadedFiles.length > 0) {
+          setIsUploading(true)
+          for (const f of uploadedFiles) {
+            await apiUploadFile(`/api/submissions/${submissionId}/files`, f, {
+              fileStage: 'proof_author_corrections',
+              submissionId: String(submissionId),
+            })
+          }
+          setUploadedFiles([])
+          setIsUploading(false)
+        }
 
-    const correctionsText = noCorrectionsNeeded
-      ? "No corrections needed - approved for publication"
-      : corrections.map((c) => `[${c.location}] ${c.type}: "${c.originalText}" → "${c.correctedText}"`).join("\n")
+        const correctionsText = noCorrectionsNeeded
+          ? "No corrections needed - approved for publication"
+          : corrections
+              .map((c) => `[${c.location}] ${c.type}: "${c.originalText}" → "${c.correctedText}"`)
+              .join("\n")
 
-    proofreadService.update(assignment.id, {
-      authorCorrections: `${correctionsText}\n\nAdditional Comments:\n${authorComments}`,
-      status: "completed",
-      files: [...assignment.files, ...uploadedFiles],
-    })
+        const message = [
+          `Proofreading Submission (Author)` ,
+          correctionsText,
+          authorComments ? `Additional Comments:\n${authorComments}` : "",
+        ].filter(Boolean).join("\n\n")
 
-    setIsSubmitDialogOpen(false)
-    loadData()
-    onComplete?.()
+        await apiPost('/api/discussions', {
+          submissionId: String(submissionId),
+          message,
+        })
+
+        setIsSubmitDialogOpen(false)
+        await loadData()
+        onComplete?.()
+      } catch (e) {
+        console.error('Failed to submit proofreading corrections:', e)
+      } finally {
+        setIsUploading(false)
+        setIsSubmitting(false)
+      }
+    })()
   }
 
   const formatDate = (dateString: string) => {
@@ -153,12 +198,23 @@ export function AuthorProofreadingPanel({ submissionId, onComplete }: AuthorProo
     return <Badge className={colors[type] || colors.other}>{type}</Badge>
   }
 
-  if (!assignment) {
+  if (isLoading) {
     return (
       <Card>
         <CardContent className="py-8 text-center">
           <Clock className="h-12 w-12 mx-auto text-muted-foreground mb-4" />
-          <p className="text-muted-foreground">No proofreading requests pending.</p>
+          <p className="text-muted-foreground">Loading proofreading tasks...</p>
+        </CardContent>
+      </Card>
+    )
+  }
+
+  if (proofFiles.length === 0) {
+    return (
+      <Card>
+        <CardContent className="py-8 text-center">
+          <Clock className="h-12 w-12 mx-auto text-muted-foreground mb-4" />
+          <p className="text-muted-foreground">No galley/proof files available yet.</p>
         </CardContent>
       </Card>
     )
@@ -189,40 +245,45 @@ export function AuthorProofreadingPanel({ submissionId, onComplete }: AuthorProo
           <AlertDescription>
             This is your final opportunity to review your article before publication. Please check carefully for any
             typographical errors, formatting issues, or content corrections.
-            {assignment.dateDue && (
-              <span className="block mt-1 font-medium">Due: {formatDate(assignment.dateDue)}</span>
-            )}
           </AlertDescription>
         </Alert>
-
-        {assignment.instructions && (
-          <div className="bg-muted/30 p-4 rounded-lg">
-            <Label className="text-sm font-medium mb-2 block">Proofreading Instructions</Label>
-            <p className="text-sm whitespace-pre-wrap">{assignment.instructions}</p>
-          </div>
-        )}
 
         <div>
           <Label className="text-sm font-medium mb-3 block">Galley Proofs</Label>
           <div className="space-y-2">
-            {assignment.files.map((file) => (
-              <div key={file.id} className="flex items-center justify-between p-3 border rounded-lg">
+            {proofFiles.map((file: any, idx: number) => (
+              <div key={file?.fileId ?? file?.file_id ?? file?.id ?? idx} className="flex items-center justify-between p-3 border rounded-lg">
                 <div className="flex items-center gap-3">
                   <FileText className="h-5 w-5 text-muted-foreground" />
                   <div>
-                    <p className="font-medium text-sm">{file.fileName}</p>
+                    <p className="font-medium text-sm">
+                      {file?.originalFileName || file?.original_file_name || file?.file_name || file?.fileName || 'File'}
+                    </p>
                     <p className="text-xs text-muted-foreground">
-                      {formatFileSize(file.fileSize)} • {formatDate(file.uploadedAt)}
+                      {formatFileSize(file?.fileSize ?? file?.file_size ?? 0)} • {formatDate(file?.uploadedAt ?? file?.date_uploaded ?? new Date().toISOString())}
                     </p>
                   </div>
                 </div>
                 <div className="flex items-center gap-1">
-                  <Button variant="ghost" size="sm">
-                    <Eye className="h-4 w-4" />
-                  </Button>
-                  <Button variant="ghost" size="sm">
-                    <Download className="h-4 w-4" />
-                  </Button>
+                  {(() => {
+                    const fileId = file?.fileId ?? file?.file_id ?? file?.id
+                    const href = fileId ? `/api/submissions/${submissionId}/files/${fileId}/download` : null
+                    if (!href) return null
+                    return (
+                      <>
+                        <Button variant="ghost" size="sm" asChild>
+                          <a href={href} target="_blank" rel="noreferrer">
+                            <Eye className="h-4 w-4" />
+                          </a>
+                        </Button>
+                        <Button variant="ghost" size="sm" asChild>
+                          <a href={href} target="_blank" rel="noreferrer">
+                            <Download className="h-4 w-4" />
+                          </a>
+                        </Button>
+                      </>
+                    )
+                  })()}
                 </div>
               </div>
             ))}

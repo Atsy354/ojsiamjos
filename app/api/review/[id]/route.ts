@@ -1,4 +1,4 @@
-import { createRouteHandlerClient } from '@/lib/supabase/server';
+import { createClient } from '@/lib/supabase/server';
 import { NextResponse } from 'next/server';
 
 export const dynamic = 'force-dynamic';
@@ -6,10 +6,10 @@ export const dynamic = 'force-dynamic';
 export async function GET(request: Request, props: { params: Promise<{ id: string }> }) {
     const params = await props.params;
     const { id } = params;
-    const supabase = await createRouteHandlerClient();
-    const { data: { session } } = await supabase.auth.getSession();
+    const supabase = await createClient();
+    const { data: { user: authUser }, error: authUserError } = await supabase.auth.getUser();
 
-    if (!session) {
+    if (authUserError || !authUser) {
         return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
@@ -32,7 +32,7 @@ export async function GET(request: Request, props: { params: Promise<{ id: strin
     }
 
     // Ensure user owns this review
-    if (data.reviewer_id !== session.user.id) {
+    if (data.reviewer_id !== authUser.id) {
         return NextResponse.json({ error: 'Access Denied' }, { status: 403 });
     }
 

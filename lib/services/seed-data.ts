@@ -15,6 +15,18 @@ export const seedUsers: Omit<User, "id" | "createdAt">[] = [
   },
 
   // ============================================
+  // JCST Managers
+  // ============================================
+  {
+    email: "manager@jcst.org",
+    firstName: "Journal",
+    lastName: "Manager",
+    roles: ["manager"],
+    affiliation: "JCST Editorial Office",
+    journalId: "jcst",
+  },
+
+  // ============================================
   // JCST - Journal of Computer Science and Technology
   // ============================================
   {
@@ -62,6 +74,14 @@ export const seedUsers: Omit<User, "id" | "createdAt">[] = [
   // IJMS - International Journal of Medical Sciences
   // ============================================
   {
+    email: "manager@ijms.org",
+    firstName: "Journal",
+    lastName: "Manager",
+    roles: ["manager"],
+    affiliation: "IJMS Editorial Office",
+    journalId: "ijms",
+  },
+  {
     email: "editor@ijms.org",
     firstName: "Robert",
     lastName: "Martinez",
@@ -106,6 +126,14 @@ export const seedUsers: Omit<User, "id" | "createdAt">[] = [
   // JEE - Journal of Environmental Engineering
   // ============================================
   {
+    email: "manager@jee.org",
+    firstName: "Journal",
+    lastName: "Manager",
+    roles: ["manager"],
+    affiliation: "JEE Editorial Office",
+    journalId: "jee",
+  },
+  {
     email: "editor@jee.org",
     firstName: "Maria",
     lastName: "Garcia",
@@ -140,6 +168,14 @@ export const seedUsers: Omit<User, "id" | "createdAt">[] = [
   // JBF - Journal of Business and Finance
   // ============================================
   {
+    email: "manager@jbf.org",
+    firstName: "Journal",
+    lastName: "Manager",
+    roles: ["manager"],
+    affiliation: "JBF Editorial Office",
+    journalId: "jbf",
+  },
+  {
     email: "editor@jbf.org",
     firstName: "Thomas",
     lastName: "Anderson",
@@ -173,6 +209,14 @@ export const seedUsers: Omit<User, "id" | "createdAt">[] = [
   // ============================================
   // JEDU - Journal of Education and Learning
   // ============================================
+  {
+    email: "manager@jedu.org",
+    firstName: "Journal",
+    lastName: "Manager",
+    roles: ["manager"],
+    affiliation: "JEDU Editorial Office",
+    journalId: "jedu",
+  },
   {
     email: "editor@jedu.org",
     firstName: "Patricia",

@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react"
 import { useParams } from "next/navigation"
 import Link from "next/link"
-import { submissionService, journalService, initializeStorage } from "@/lib/storage"
+import { apiGet } from "@/lib/api/client"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { Separator } from "@/components/ui/separator"
@@ -67,31 +67,62 @@ export default function ArticleDetailPage() {
   }
 
   useEffect(() => {
-    initializeStorage()
-    setMounted(true)
+    const loadData = async () => {
+      try {
+        // Load article from API
+        const sub = await apiGet<any>(`/api/submissions/${id}`)
+        if (sub) {
+          setArticle({
+            ...sub,
+            keywords: sub.keywords || [],
+            authors: sub.authors || [],
+            dateSubmitted: sub.date_submitted,
+            journalId: sub.journal_id,
+          } as any)
+          setArticleContent(getArticleContent(sub.keywords || []))
 
-    const sub = submissionService.getById(id)
-    if (sub) {
-      setArticle(sub)
-      setArticleContent(getArticleContent(sub.keywords))
+          // Load journal
+          if (sub.journal_id) {
+            try {
+              const j = await apiGet<any>(`/api/journals/${sub.journal_id}`)
+              if (j) {
+                setJournal(j as any)
+              }
+            } catch (err) {
+              console.error("Failed to load journal:", err)
+            }
+          }
 
-      const j = journalService.getByIdOrPath(sub.journalId)
-      if (j) {
-        setJournal(j)
+          // Get related articles (same keywords) - only published articles
+          try {
+            const allSubs = await apiGet<any[]>("/api/submissions?status=published")
+            const related = (allSubs || [])
+              .filter(
+                (s: any) =>
+                  s.id !== sub.id &&
+                  s.status === "published" &&
+                  (s.keywords || []).some((k: string) => (sub.keywords || []).includes(k)),
+              )
+              .slice(0, 3)
+              .map((s: any) => ({
+                ...s,
+                keywords: s.keywords || [],
+                authors: s.authors || [],
+                dateSubmitted: s.date_submitted,
+              }))
+            setRelatedArticles(related as any)
+          } catch (err) {
+            console.error("Failed to load related articles:", err)
+          }
+        }
+      } catch (err: any) {
+        console.error("Failed to load article:", err)
+      } finally {
+        setMounted(true)
       }
-
-      // Get related articles (same keywords)
-      const allSubs = submissionService.getAll()
-      const related = allSubs
-        .filter(
-          (s) =>
-            s.id !== sub.id &&
-            (s.status === "accepted" || s.status === "published") &&
-            s.keywords.some((k) => sub.keywords.includes(k)),
-        )
-        .slice(0, 3)
-      setRelatedArticles(related)
     }
+
+    loadData()
   }, [id])
 
   const handleCopyDoi = () => {

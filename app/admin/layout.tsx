@@ -14,8 +14,7 @@ import {
 } from "@/components/ui/dropdown-menu"
 import { useAuth } from "@/lib/hooks/use-auth"
 import { usePathname, useRouter } from "next/navigation"
-import { journalService } from "@/lib/services/journal-service"
-import { initializeStorage } from "@/lib/storage"
+import { apiGet } from "@/lib/api/client"
 import type { Journal } from "@/lib/types"
 import { Badge } from "@/components/ui/badge"
 
@@ -30,11 +29,20 @@ export default function AdminLayout({ children }: AdminLayoutProps) {
   const isMainAdmin = pathname === "/admin"
 
   const [journals, setJournals] = useState<Journal[]>([])
+  const [journalsLoading, setJournalsLoading] = useState(true)
 
   useEffect(() => {
-    initializeStorage()
-    const allJournals = journalService.getAll()
-    setJournals(allJournals)
+    const loadJournals = async () => {
+      try {
+        const data = await apiGet<Journal[]>("/api/journals")
+        setJournals(data || [])
+      } catch (error) {
+        console.error("Failed to load journals:", error)
+      } finally {
+        setJournalsLoading(false)
+      }
+    }
+    loadJournals()
   }, [])
 
   const handleJournalSelect = (journal: Journal) => {

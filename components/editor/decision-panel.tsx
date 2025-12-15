@@ -1,6 +1,6 @@
 "use client"
 
-import { useState } from "react"
+import { useEffect, useMemo, useState } from "react"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
@@ -30,62 +30,9 @@ import {
   ThumbsDown,
   Edit3,
 } from "lucide-react"
-
-// Mock data for submissions awaiting decision
-const awaitingDecision = [
-  {
-    id: "SUB-2024-008",
-    title: "Blockchain Applications in Supply Chain Management",
-    authors: ["Prof. Maria Garcia"],
-    section: "Technical Papers",
-    round: 2,
-    dateSubmitted: "2024-10-15",
-    reviews: [
-      {
-        reviewer: "Dr. Robert Taylor",
-        recommendation: "accept",
-        summary:
-          "Excellent work with significant contributions to the field. The methodology is sound and results are well-presented.",
-        quality: 5,
-      },
-      {
-        reviewer: "Dr. Lisa Anderson",
-        recommendation: "minor_revisions",
-        summary: "Good paper overall. Some minor issues with the literature review section that should be addressed.",
-        quality: 4,
-      },
-    ],
-  },
-  {
-    id: "SUB-2024-005",
-    title: "Renewable Energy Integration in Smart Grids",
-    authors: ["Dr. Kevin Park", "Prof. Susan Lee"],
-    section: "Research Articles",
-    round: 1,
-    dateSubmitted: "2024-10-20",
-    reviews: [
-      {
-        reviewer: "Prof. Alan Wright",
-        recommendation: "major_revisions",
-        summary:
-          "The concept is interesting but the experimental design has significant flaws that need to be addressed.",
-        quality: 3,
-      },
-      {
-        reviewer: "Dr. Nancy Chen",
-        recommendation: "minor_revisions",
-        summary: "Well-written paper with good potential. Needs more recent citations and clearer methodology section.",
-        quality: 4,
-      },
-      {
-        reviewer: "Dr. Paul Martinez",
-        recommendation: "major_revisions",
-        summary: "The results section needs substantial revision. Some claims are not well-supported by the data.",
-        quality: 3,
-      },
-    ],
-  },
-]
+import Link from "next/link"
+import { apiGet, apiPost } from "@/lib/api/client"
+import { useToast } from "@/hooks/use-toast"
 
 const getRecommendationIcon = (recommendation: string) => {
   switch (recommendation) {
@@ -113,21 +60,147 @@ const getRecommendationLabel = (recommendation: string) => {
 }
 
 export function DecisionPanel() {
+  const { toast } = useToast()
+
+  const [isLoading, setIsLoading] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+  const [reviews, setReviews] = useState<any[]>([])
+
   const [selectedSubmission, setSelectedSubmission] = useState<string | null>(null)
   const [decision, setDecision] = useState("")
   const [comments, setComments] = useState("")
   const [dialogOpen, setDialogOpen] = useState(false)
 
-  const handleMakeDecision = () => {
-    console.log("Decision made:", { submissionId: selectedSubmission, decision, comments })
-    setDialogOpen(false)
-    setDecision("")
-    setComments("")
+  useEffect(() => {
+    let alive = true
+    void (async () => {
+      setIsLoading(true)
+      setError(null)
+      try {
+        const resp: any = await apiGet(`/api/reviews`)
+        const list = Array.isArray(resp) ? resp : (resp?.data ?? [])
+        if (!alive) return
+        setReviews(Array.isArray(list) ? list : [])
+      } catch (e: any) {
+        if (!alive) return
+        setError(e?.message || "Failed to load reviews")
+        setReviews([])
+      } finally {
+        if (!alive) return
+        setIsLoading(false)
+      }
+    })()
+    return () => {
+      alive = false
+    }
+  }, [])
+
+  const awaitingDecision = useMemo(() => {
+    const list = Array.isArray(reviews) ? reviews : []
+    const bySubmission = new Map<string, any>()
+
+    const reviewerName = (r: any) => {
+      const rev = r?.reviewer
+      const first = rev?.first_name ?? rev?.firstName ?? ""
+      const last = rev?.last_name ?? rev?.lastName ?? ""
+      return `${first} ${last}`.trim() || rev?.email || String(r?.reviewer_id ?? "")
+    }
+
+    for (const r of list) {
+      if (!r || r.cancelled) continue
+      const submission = r.submission || null
+      const submissionId = String(r.submission_id ?? submission?.id ?? "")
+      if (!submissionId) continue
+
+      if (!bySubmission.has(submissionId)) {
+        bySubmission.set(submissionId, {
+          id: submissionId,
+          title: submission?.title ?? `Submission ${submissionId}`,
+          section: submission?.sectionTitle ?? submission?.section_title ?? submission?.section?.title ?? submission?.section ?? "",
+          round: r.review_round?.round ?? null,
+          dateSubmitted: submission?.dateSubmitted ?? submission?.date_submitted ?? submission?.date_created ?? submission?.created_at ?? null,
+          authors: [],
+          reviews: [],
+          submission,
+        })
+      }
+
+      const entry = bySubmission.get(submissionId)
+      entry.round = entry.round ?? r.review_round?.round ?? null
+      entry.submission = entry.submission ?? submission
+      entry.reviews.push({
+        reviewer: reviewerName(r),
+        recommendation: String(r?.recommendation ?? ""),
+        status: String(r?.status ?? "pending"),
+      })
+    }
+
+    const arr = Array.from(bySubmission.values())
+
+    return arr
+      .map((s: any) => {
+        const allReviews = Array.isArray(s.reviews) ? s.reviews : []
+        const totalAssigned = allReviews.length
+        const completedAssigned = allReviews.filter((rv: any) => rv?.status === 'completed').length
+        const allCompleted = totalAssigned > 0 && completedAssigned === totalAssigned
+
+        return {
+          ...s,
+          totalAssigned,
+          completedAssigned,
+          allCompleted,
+        }
+      })
+      .filter((s: any) => s.allCompleted)
+      .sort((a, b) => Number(b.id) - Number(a.id))
+  }, [reviews])
+
+  const handleMakeDecision = async () => {
+    if (!selectedSubmission) return
+    if (!decision) return
+
+    try {
+      await apiPost("/api/workflow/decision", {
+        submissionId: Number(selectedSubmission) || selectedSubmission,
+        decision,
+        comments,
+      })
+
+      toast({
+        title: "Decision submitted",
+        description: "Editorial decision saved successfully",
+        duration: 3000,
+      })
+
+      setDialogOpen(false)
+      setDecision("")
+      setComments("")
+    } catch (e: any) {
+      toast({
+        title: "Failed to submit decision",
+        description: e?.message || "Request failed",
+        variant: "destructive",
+        duration: 7000,
+      })
+    }
   }
 
   return (
     <div className="space-y-6">
-      {awaitingDecision.map((submission) => (
+      {isLoading && (
+        <div className="text-sm text-muted-foreground">Loading submissions awaiting decision...</div>
+      )}
+      {!isLoading && error && (
+        <div className="text-sm text-destructive">{error}</div>
+      )}
+      {!isLoading && !error && awaitingDecision.length === 0 && (
+        <div className="text-center py-12 text-muted-foreground">
+          <FileText className="h-12 w-12 mx-auto mb-4 opacity-50" />
+          <p>No submissions awaiting decision</p>
+        </div>
+      )}
+
+      {awaitingDecision.map((submission: any) => (
         <Card key={submission.id} className="bg-card border-border">
           <CardHeader>
             <div className="flex items-start justify-between">
@@ -136,9 +209,7 @@ export function DecisionPanel() {
                   <Badge variant="outline" className="text-xs font-mono">
                     {submission.id}
                   </Badge>
-                  <Badge variant="secondary" className="text-xs">
-                    Round {submission.round}
-                  </Badge>
+                  <Badge variant="secondary" className="text-xs">Round {submission.round ?? "-"}</Badge>
                   <Badge variant="secondary" className="bg-primary/10 text-primary text-xs">
                     {submission.section}
                   </Badge>
@@ -146,7 +217,7 @@ export function DecisionPanel() {
                 <CardTitle className="text-lg text-foreground">{submission.title}</CardTitle>
                 <CardDescription className="flex items-center gap-1 mt-1">
                   <User className="h-3.5 w-3.5" />
-                  {submission.authors.join(", ")}
+                  {Array.isArray(submission.authors) && submission.authors.length > 0 ? submission.authors.join(", ") : "-"}
                 </CardDescription>
               </div>
               <Dialog open={dialogOpen && selectedSubmission === submission.id} onOpenChange={setDialogOpen}>
@@ -169,29 +240,29 @@ export function DecisionPanel() {
                       <Label>Decision</Label>
                       <RadioGroup value={decision} onValueChange={setDecision}>
                         <div className="flex items-center space-x-3 p-3 rounded-lg border border-border hover:bg-muted/50">
-                          <RadioGroupItem value="accept" id="accept" />
-                          <Label htmlFor="accept" className="flex items-center gap-2 cursor-pointer flex-1">
+                          <RadioGroupItem value="accept" id={`accept-${submission.id}`} />
+                          <Label htmlFor={`accept-${submission.id}`} className="flex items-center gap-2 cursor-pointer flex-1">
                             <CheckCircle className="h-4 w-4 text-green-500" />
                             Accept
                           </Label>
                         </div>
                         <div className="flex items-center space-x-3 p-3 rounded-lg border border-border hover:bg-muted/50">
-                          <RadioGroupItem value="minor_revisions" id="minor" />
-                          <Label htmlFor="minor" className="flex items-center gap-2 cursor-pointer flex-1">
+                          <RadioGroupItem value="minor_revisions" id={`minor-${submission.id}`} />
+                          <Label htmlFor={`minor-${submission.id}`} className="flex items-center gap-2 cursor-pointer flex-1">
                             <Edit3 className="h-4 w-4 text-blue-500" />
                             Request Minor Revisions
                           </Label>
                         </div>
                         <div className="flex items-center space-x-3 p-3 rounded-lg border border-border hover:bg-muted/50">
-                          <RadioGroupItem value="major_revisions" id="major" />
-                          <Label htmlFor="major" className="flex items-center gap-2 cursor-pointer flex-1">
+                          <RadioGroupItem value="major_revisions" id={`major-${submission.id}`} />
+                          <Label htmlFor={`major-${submission.id}`} className="flex items-center gap-2 cursor-pointer flex-1">
                             <RotateCcw className="h-4 w-4 text-amber-500" />
                             Request Major Revisions
                           </Label>
                         </div>
                         <div className="flex items-center space-x-3 p-3 rounded-lg border border-border hover:bg-muted/50">
-                          <RadioGroupItem value="decline" id="decline" />
-                          <Label htmlFor="decline" className="flex items-center gap-2 cursor-pointer flex-1">
+                          <RadioGroupItem value="decline" id={`decline-${submission.id}`} />
+                          <Label htmlFor={`decline-${submission.id}`} className="flex items-center gap-2 cursor-pointer flex-1">
                             <XCircle className="h-4 w-4 text-red-500" />
                             Decline
                           </Label>
@@ -228,56 +299,52 @@ export function DecisionPanel() {
             <div className="space-y-4">
               <div className="flex items-center gap-2 text-sm text-muted-foreground">
                 <MessageSquare className="h-4 w-4" />
-                <span>{submission.reviews.length} Reviews Completed</span>
+                <span>{submission.completedAssigned}/{submission.totalAssigned} Reviews Completed</span>
               </div>
 
               <Separator />
 
               <div className="space-y-3">
                 <h4 className="font-medium text-foreground text-sm">Review Summary</h4>
-                {submission.reviews.map((review, index) => (
+                {submission.reviews.map((review: any, index: number) => (
                   <div key={index} className="p-3 rounded-lg bg-muted/30 border border-border">
                     <div className="flex items-center justify-between mb-2">
                       <div className="flex items-center gap-2">
                         <Avatar className="h-7 w-7">
                           <AvatarFallback className="bg-muted text-muted-foreground text-xs">
-                            {review.reviewer
+                            {String(review.reviewer || "")
                               .split(" ")
-                              .map((n) => n[0])
+                              .filter(Boolean)
+                              .map((n: string) => n[0])
                               .join("")}
                           </AvatarFallback>
                         </Avatar>
                         <span className="text-sm font-medium text-foreground">{review.reviewer}</span>
                       </div>
                       <div className="flex items-center gap-2">
-                        {getRecommendationIcon(review.recommendation)}
+                        {getRecommendationIcon(String(review.recommendation || ""))}
                         <span className="text-sm text-muted-foreground">
-                          {getRecommendationLabel(review.recommendation)}
+                          {getRecommendationLabel(String(review.recommendation || ""))}
                         </span>
                       </div>
                     </div>
-                    <p className="text-sm text-muted-foreground">{review.summary}</p>
-                    <div className="flex items-center gap-1 mt-2">
-                      {[1, 2, 3, 4, 5].map((star) => (
-                        <div
-                          key={star}
-                          className={`w-2 h-2 rounded-full ${star <= review.quality ? "bg-amber-400" : "bg-muted"}`}
-                        />
-                      ))}
-                      <span className="text-xs text-muted-foreground ml-1">Quality: {review.quality}/5</span>
-                    </div>
+                    <p className="text-sm text-muted-foreground">Recommendation: {getRecommendationLabel(String(review.recommendation || ""))}</p>
                   </div>
                 ))}
               </div>
 
               <div className="flex gap-2">
-                <Button variant="outline" size="sm" className="flex-1 bg-transparent">
-                  <FileText className="mr-2 h-4 w-4" />
-                  View Full Submission
+                <Button variant="outline" size="sm" className="flex-1 bg-transparent" asChild>
+                  <Link href={`/submissions/${submission.id}`}>
+                    <FileText className="mr-2 h-4 w-4" />
+                    View Full Submission
+                  </Link>
                 </Button>
-                <Button variant="outline" size="sm" className="flex-1 bg-transparent">
-                  <MessageSquare className="mr-2 h-4 w-4" />
-                  Read Full Reviews
+                <Button variant="outline" size="sm" className="flex-1 bg-transparent" asChild>
+                  <Link href={`/submissions/${submission.id}?tab=reviews`}>
+                    <MessageSquare className="mr-2 h-4 w-4" />
+                    Read Full Reviews
+                  </Link>
                 </Button>
               </div>
             </div>

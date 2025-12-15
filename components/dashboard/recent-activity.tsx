@@ -38,7 +38,7 @@ export function RecentActivity({ submissions }: RecentActivityProps) {
         ) : (
           recentSubmissions.map((submission) => {
             const Icon = activityIcons[submission.status] || FileText
-            const author = submission.authors[0]
+            const author = (submission.authors && submission.authors.length > 0) ? submission.authors[0] : null
 
             return (
               <div key={submission.id} className="flex items-start gap-3">
@@ -52,8 +52,8 @@ export function RecentActivity({ submissions }: RecentActivityProps) {
                       <>
                         <Avatar className="h-4 w-4">
                           <AvatarFallback className="text-[8px]">
-                            {author.firstName[0]}
-                            {author.lastName[0]}
+                            {author.firstName?.[0] || 'A'}
+                            {author.lastName?.[0] || 'U'}
                           </AvatarFallback>
                         </Avatar>
                         <span>

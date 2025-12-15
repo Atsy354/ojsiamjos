@@ -2,7 +2,8 @@
 
 import { useEffect, useState } from "react"
 import { DashboardLayout } from "@/components/layout/dashboard-layout"
-import { issueService, journalService, initializeStorage } from "@/lib/storage"
+import { apiGet, apiPost, apiPut } from "@/lib/api/client"
+import { useAuth } from "@/lib/hooks/use-auth"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
@@ -20,11 +21,14 @@ import { Label } from "@/components/ui/label"
 import { Textarea } from "@/components/ui/textarea"
 import { Plus, BookOpen, Calendar, FileText, Eye, Edit, Globe } from "lucide-react"
 import { format } from "date-fns"
+import { toast } from "sonner"
 import type { Issue } from "@/lib/types"
 
 export default function IssuesPage() {
+  const { currentJournal } = useAuth()
   const [mounted, setMounted] = useState(false)
   const [issues, setIssues] = useState<Issue[]>([])
+  const [loading, setLoading] = useState(true)
   const [createDialog, setCreateDialog] = useState(false)
   const [newIssue, setNewIssue] = useState({
     volume: 1,
@@ -35,62 +39,86 @@ export default function IssuesPage() {
   })
 
   useEffect(() => {
-    initializeStorage()
-    setMounted(true)
     loadIssues()
-  }, [])
+  }, [currentJournal])
 
-  const loadIssues = () => {
-    const journals = journalService.getAll()
-    if (journals.length > 0) {
-      setIssues(issueService.getByJournal(journals[0].id))
+  const loadIssues = async () => {
+    if (!currentJournal) {
+      setLoading(false)
+      setMounted(true)
+      return
+    }
+
+    try {
+      setLoading(true)
+      const journalId = (currentJournal as any).journal_id || (currentJournal as any).id
+      const data = await apiGet<Issue[]>(`/api/issues?journalId=${journalId}`)
+      setIssues(data || [])
+    } catch (error: any) {
+      toast.error(error.message || "Failed to load issues")
+      console.error("Failed to load issues:", error)
+    } finally {
+      setLoading(false)
+      setMounted(true)
     }
   }
 
-  const handleCreateIssue = () => {
-    const journals = journalService.getAll()
-    if (journals.length === 0) return
+  const handleCreateIssue = async () => {
+    if (!currentJournal) {
+      toast.error("Please select a journal first")
+      return
+    }
 
-    issueService.create({
-      journalId: journals[0].id,
-      volume: newIssue.volume,
-      number: newIssue.number,
-      year: newIssue.year,
-      title: newIssue.title || undefined,
-      description: newIssue.description || undefined,
-      isPublished: false,
-      isCurrent: false,
-    })
+    try {
+      const journalId = (currentJournal as any).journal_id || (currentJournal as any).id
+      await apiPost("/api/issues", {
+        journalId: String(journalId),
+        volume: newIssue.volume,
+        number: newIssue.number,
+        year: newIssue.year,
+        title: newIssue.title || undefined,
+        description: newIssue.description || undefined,
+        status: "unpublished",
+      })
 
-    setCreateDialog(false)
-    setNewIssue({
-      volume: 1,
-      number: 1,
-      year: new Date().getFullYear(),
-      title: "",
-      description: "",
-    })
-    loadIssues()
+      toast.success("Issue created successfully")
+      setCreateDialog(false)
+      setNewIssue({
+        volume: 1,
+        number: 1,
+        year: new Date().getFullYear(),
+        title: "",
+        description: "",
+      })
+      loadIssues()
+    } catch (error: any) {
+      toast.error(error.message || "Failed to create issue")
+    }
   }
 
-  const handlePublish = (id: string) => {
-    // Unpublish current issue
-    issues.forEach((issue) => {
-      if (issue.isCurrent) {
-        issueService.update(issue.id, { isCurrent: false })
+  const handlePublish = async (id: string) => {
+    try {
+      // Unpublish current issue
+      const currentIssues = issues.filter((issue) => (issue as any).is_current)
+      for (const issue of currentIssues) {
+        await apiPut(`/api/issues/${issue.id}`, { isCurrent: false })
       }
-    })
 
-    // Publish selected issue
-    issueService.update(id, {
-      isPublished: true,
-      isCurrent: true,
-      datePublished: new Date().toISOString(),
-    })
-    loadIssues()
+      // Publish selected issue
+      await apiPut(`/api/issues/${id}`, {
+        status: "published",
+        isCurrent: true,
+        datePublished: new Date().toISOString(),
+      })
+
+      toast.success("Issue published successfully")
+      loadIssues()
+    } catch (error: any) {
+      toast.error(error.message || "Failed to publish issue")
+    }
   }
 
-  if (!mounted) {
+  if (!mounted || loading) {
     return (
       <DashboardLayout title="Issues" subtitle="Manage journal issues">
         <div className="flex items-center justify-center py-12">
@@ -100,8 +128,8 @@ export default function IssuesPage() {
     )
   }
 
-  const publishedIssues = issues.filter((i) => i.isPublished)
-  const unpublishedIssues = issues.filter((i) => !i.isPublished)
+  const publishedIssues = issues.filter((i) => (i as any).status === "published" || i.isPublished)
+  const unpublishedIssues = issues.filter((i) => (i as any).status === "unpublished" || !i.isPublished)
 
   return (
     <DashboardLayout title="Issues" subtitle="Manage journal issues">

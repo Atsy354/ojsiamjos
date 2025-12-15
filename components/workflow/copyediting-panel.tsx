@@ -131,7 +131,7 @@ export function CopyeditingPanel({ submission, isEditor, onStatusChange }: Copye
     const newFile: SubmissionFile = {
       id: `file-${Date.now()}`,
       submissionId: submission.id,
-      fileName: `copyedited_${submission.id.slice(-6)}.docx`,
+      fileName: `copyedited_${String(submission.id).slice(-6)}.docx`,
       fileType: "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
       fileSize: Math.floor(Math.random() * 500000) + 100000,
       fileStage: "copyedit",

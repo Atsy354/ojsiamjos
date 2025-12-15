@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react"
 import { DashboardLayout } from "@/components/layout/dashboard-layout"
-import { journalService, initializeStorage, resetStorage } from "@/lib/storage"
+import { apiGet, apiPatch } from "@/lib/api/client"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -11,6 +11,7 @@ import { Label } from "@/components/ui/label"
 import { Separator } from "@/components/ui/separator"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Save, RefreshCw, BookOpen, AlertTriangle } from "lucide-react"
+import { useToast } from "@/hooks/use-toast"
 import {
   AlertDialog,
   AlertDialogAction,
@@ -25,6 +26,7 @@ import {
 import type { Journal } from "@/lib/types"
 
 export default function SettingsPage() {
+  const { toast } = useToast()
   const [mounted, setMounted] = useState(false)
   const [journal, setJournal] = useState<Journal | null>(null)
   const [formData, setFormData] = useState({
@@ -37,32 +39,52 @@ export default function SettingsPage() {
   })
 
   useEffect(() => {
-    initializeStorage()
     setMounted(true)
 
-    const journals = journalService.getAll()
-    if (journals.length > 0) {
-      const j = journals[0]
-      setJournal(j)
-      setFormData({
-        name: j.name,
-        acronym: j.acronym,
-        description: j.description,
-        issn: j.issn || "",
-        publisher: j.publisher || "",
-        contactEmail: j.contactEmail,
+    apiGet<any[]>("/api/journals")
+      .then((journals) => {
+        const list = Array.isArray(journals) ? journals : []
+        if (list.length === 0) return
+        const j = list[0]
+        setJournal(j)
+        setFormData({
+          name: j.name || "",
+          acronym: j.acronym || "",
+          description: j.description || "",
+          issn: j.issn || "",
+          publisher: j.publisher || "",
+          contactEmail: j.contactEmail || j.contact_email || "",
+        })
       })
-    }
+      .catch(() => {
+        // Ignore
+      })
   }, [])
 
   const handleSave = () => {
     if (!journal) return
-    journalService.update(journal.id, formData)
+    apiPatch(`/api/journals/${journal.id}`, {
+      name: formData.name,
+      acronym: formData.acronym,
+      description: formData.description,
+      issn: formData.issn || null,
+      publisher: formData.publisher || null,
+      contact_email: formData.contactEmail,
+    })
+      .then(() => {
+        toast({ title: "Success", description: "Journal settings saved" })
+      })
+      .catch((error: any) => {
+        toast({ title: "Error", description: error.message, variant: "destructive" })
+      })
   }
 
   const handleReset = () => {
-    resetStorage()
-    window.location.reload()
+    toast({
+      title: "Not supported",
+      description: "Reset All Data is disabled in Supabase mode.",
+      variant: "destructive",
+    })
   }
 
   if (!mounted) {

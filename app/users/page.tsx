@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react"
 import { DashboardLayout } from "@/components/layout/dashboard-layout"
-import { userService, initializeStorage } from "@/lib/storage"
+import { apiDelete, apiGet } from "@/lib/api/client"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
@@ -12,20 +12,49 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Search, Users, Plus, MoreHorizontal, Mail } from "lucide-react"
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu"
 import { format } from "date-fns"
+import { toast } from "sonner"
 import type { User } from "@/lib/types"
+import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog"
+import { Label } from "@/components/ui/label"
+import { Checkbox } from "@/components/ui/checkbox"
 
 export default function UsersPage() {
   const [mounted, setMounted] = useState(false)
   const [users, setUsers] = useState<User[]>([])
   const [search, setSearch] = useState("")
+  const [loading, setLoading] = useState(true)
+  const [editOpen, setEditOpen] = useState(false)
+  const [rolesOpen, setRolesOpen] = useState(false)
+  const [selectedUser, setSelectedUser] = useState<User | null>(null)
+  const [editForm, setEditForm] = useState({ firstName: "", lastName: "", affiliation: "" })
+  const [roleForm, setRoleForm] = useState<{ [key: string]: boolean }>({ admin: false, manager: false, editor: false, author: false, reviewer: false, reader: false })
+
+  const loadUsers = async () => {
+    try {
+      const res = await apiGet<{ data: any[] }>("/api/users")
+      const mapped = (res?.data || []).map((u: any) => ({
+        id: u.id,
+        email: u.email,
+        firstName: u.first_name,
+        lastName: u.last_name,
+        roles: u.roles || [],
+        createdAt: u.created_at,
+        affiliation: u.affiliation || "",
+      })) as User[]
+      setUsers(mapped)
+    } catch (error: any) {
+      toast.error(error.message || "Failed to load users")
+    } finally {
+      setLoading(false)
+      setMounted(true)
+    }
+  }
 
   useEffect(() => {
-    initializeStorage()
-    setMounted(true)
-    setUsers(userService.getAll())
+    loadUsers()
   }, [])
 
-  if (!mounted) {
+  if (!mounted || loading) {
     return (
       <DashboardLayout title="Users" subtitle="Manage system users">
         <div className="flex items-center justify-center py-12">
@@ -43,10 +72,10 @@ export default function UsersPage() {
   )
 
   const roleColors: Record<string, string> = {
-    admin: "bg-destructive text-destructive-foreground",
+    admin: "bg-success text-success-foreground",
     editor: "bg-primary text-primary-foreground",
-    author: "bg-accent text-accent-foreground",
-    reviewer: "bg-success text-success-foreground",
+    author: "bg-primary/20 text-foreground",
+    reviewer: "bg-primary/30 text-foreground",
     reader: "bg-secondary text-secondary-foreground",
   }
 
@@ -163,9 +192,34 @@ export default function UsersPage() {
                         </Button>
                       </DropdownMenuTrigger>
                       <DropdownMenuContent align="end">
-                        <DropdownMenuItem>Edit User</DropdownMenuItem>
-                        <DropdownMenuItem>Manage Roles</DropdownMenuItem>
-                        <DropdownMenuItem className="text-destructive">Delete User</DropdownMenuItem>
+                        <DropdownMenuItem onClick={() => {
+                          setSelectedUser(user)
+                          setEditForm({ firstName: user.firstName, lastName: user.lastName, affiliation: user.affiliation || "" })
+                          setEditOpen(true)
+                        }}>Edit User</DropdownMenuItem>
+                        <DropdownMenuItem onClick={() => {
+                          setSelectedUser(user)
+                          setRoleForm({
+                            admin: user.roles.includes("admin" as any),
+                            manager: user.roles.includes("manager" as any),
+                            editor: user.roles.includes("editor" as any),
+                            author: user.roles.includes("author" as any),
+                            reviewer: user.roles.includes("reviewer" as any),
+                            reader: user.roles.includes("reader" as any),
+                          })
+                          setRolesOpen(true)
+                        }}>Manage Roles</DropdownMenuItem>
+                        <DropdownMenuItem className="text-destructive" onClick={async () => {
+                          const ok = typeof window !== "undefined" ? window.confirm("Delete this user?") : true
+                          if (!ok) return
+                          try {
+                            await apiDelete(`/api/users/${user.id}`)
+                            toast.success("User deleted")
+                            loadUsers()
+                          } catch (error: any) {
+                            toast.error(error.message || "Failed to delete user")
+                          }
+                        }}>Delete User</DropdownMenuItem>
                       </DropdownMenuContent>
                     </DropdownMenu>
                   </TableCell>
@@ -175,6 +229,114 @@ export default function UsersPage() {
           </Table>
         </Card>
       </div>
+      <UsersDialogs
+        editOpen={editOpen}
+        setEditOpen={setEditOpen}
+        rolesOpen={rolesOpen}
+        setRolesOpen={setRolesOpen}
+        selectedUser={selectedUser}
+        editForm={editForm}
+        setEditForm={setEditForm}
+        roleForm={roleForm}
+        setRoleForm={setRoleForm}
+        onSaved={loadUsers}
+      />
     </DashboardLayout>
+  )
+}
+
+function RolesList({ roleForm, setRoleForm }: { roleForm: { [key: string]: boolean }, setRoleForm: (v: any) => void }) {
+  const toggle = (key: string) => setRoleForm({ ...roleForm, [key]: !roleForm[key] })
+  return (
+    <div className="grid grid-cols-2 gap-3">
+      {Object.keys(roleForm).map((key) => (
+        <div key={key} className="flex items-center gap-2">
+          <Checkbox checked={!!roleForm[key]} onCheckedChange={() => toggle(key)} />
+          <Label className="capitalize">{key.replace("_", " ")}</Label>
+        </div>
+      ))}
+    </div>
+  )
+}
+
+export function UsersDialogs({
+  editOpen,
+  setEditOpen,
+  rolesOpen,
+  setRolesOpen,
+  selectedUser,
+  editForm,
+  setEditForm,
+  roleForm,
+  setRoleForm,
+  onSaved,
+}: any) {
+  const saveEdit = async () => {
+    if (!selectedUser) return
+    try {
+      const body = { first_name: editForm.firstName, last_name: editForm.lastName, affiliation: editForm.affiliation }
+      await apiRequest(`/api/users/${selectedUser.id}`, { method: "PATCH", body: JSON.stringify(body) })
+      setEditOpen(false)
+      onSaved()
+      toast.success("User updated")
+    } catch (error: any) {
+      toast.error(error.message || "Failed to update user")
+    }
+  }
+
+  const saveRoles = async () => {
+    if (!selectedUser) return
+    try {
+      const roles = Object.keys(roleForm).filter((k) => roleForm[k])
+      await apiRequest(`/api/users/${selectedUser.id}/roles`, { method: "PATCH", body: JSON.stringify({ roles }) })
+      setRolesOpen(false)
+      onSaved()
+      toast.success("Roles updated")
+    } catch (error: any) {
+      toast.error(error.message || "Failed to update roles")
+    }
+  }
+
+  return (
+    <>
+      <Dialog open={editOpen} onOpenChange={setEditOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Edit User</DialogTitle>
+          </DialogHeader>
+          <div className="grid gap-4">
+            <div className="space-y-2">
+              <Label>First Name</Label>
+              <Input value={editForm.firstName} onChange={(e) => setEditForm({ ...editForm, firstName: e.target.value })} />
+            </div>
+            <div className="space-y-2">
+              <Label>Last Name</Label>
+              <Input value={editForm.lastName} onChange={(e) => setEditForm({ ...editForm, lastName: e.target.value })} />
+            </div>
+            <div className="space-y-2">
+              <Label>Affiliation</Label>
+              <Input value={editForm.affiliation} onChange={(e) => setEditForm({ ...editForm, affiliation: e.target.value })} />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setEditOpen(false)}>Cancel</Button>
+            <Button onClick={saveEdit}>Save</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={rolesOpen} onOpenChange={setRolesOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Manage Roles</DialogTitle>
+          </DialogHeader>
+          <RolesList roleForm={roleForm} setRoleForm={setRoleForm} />
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setRolesOpen(false)}>Cancel</Button>
+            <Button onClick={saveRoles}>Save</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+    </>
   )
 }

@@ -431,7 +431,7 @@ function JournalSettingsContent() {
 
   const handleSave = async () => {
     if (!journal) return
-    console.log("Saving settings:", formData)
+    journalService.update(journal.id, formData)
   }
 
   if (loading || authLoading || !journal) {

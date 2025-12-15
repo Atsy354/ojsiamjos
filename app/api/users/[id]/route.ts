@@ -1,190 +1,96 @@
-// app/api/users/[id]/route.ts
 import { NextRequest, NextResponse } from "next/server"
-import { authMiddleware, AuthRequest } from "@/lib/auth/middleware"
-import { prisma } from "@/lib/prisma"
-import { z } from "zod"
+import { createClient } from "@/lib/supabase/server"
+import { requireAdmin, requireAuth } from "@/lib/middleware/auth"
 
-const updateUserSchema = z.object({
-  firstName: z.string().min(1).optional(),
-  lastName: z.string().min(1).optional(),
-  affiliation: z.string().optional(),
-  orcid: z.string().optional(),
-  bio: z.string().optional(),
-  avatar: z.string().optional(),
-  roles: z.array(z.string()).optional(),
-  journalId: z.string().nullable().optional(),
-})
-
-export const GET = authMiddleware(async (
-  req: AuthRequest,
-  { params }: { params: Promise<{ id: string }> }
-) => {
+export async function GET(
+  request: NextRequest,
+  { params }: { params: { id: string } }
+) {
   try {
-    const { id } = await params
-
-    // Users can view their own profile, admins/editors can view any
-    const isOwnProfile = id === req.user?.userId
-    const isAdminOrEditor = req.user?.roles.includes("admin") || req.user?.roles.includes("editor")
-
-    if (!isOwnProfile && !isAdminOrEditor) {
-      return NextResponse.json(
-        { error: "Unauthorized" },
-        { status: 403 }
-      )
+    const supabase = await createClient()
+    // Allow self or admin only
+    const { data: { user: authUser }, error: authUserError } = await supabase.auth.getUser()
+    if (authUserError || !authUser) {
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
     }
 
-    const user = await prisma.user.findUnique({
-      where: { id },
-      select: {
-        id: true,
-        email: true,
-        firstName: true,
-        lastName: true,
-        affiliation: true,
-        orcid: true,
-        roles: true,
-        bio: true,
-        avatar: true,
-        journalId: true,
-        createdAt: true,
-        updatedAt: true,
-        journal: {
-          select: {
-            id: true,
-            name: true,
-            path: true,
-          },
-        },
-        _count: {
-          select: {
-            submissions: true,
-            reviewAssignments: true,
-          },
-        },
-      },
-    })
+    let isAdmin = false
+    const { authorized } = await requireAdmin(request)
+    isAdmin = authorized
 
-    if (!user) {
-      return NextResponse.json(
-        { error: "User not found" },
-        { status: 404 }
-      )
+    if (!isAdmin && authUser.id !== params.id) {
+      return NextResponse.json({ error: "Forbidden" }, { status: 403 })
     }
 
-    return NextResponse.json(user)
-  } catch (error: any) {
-    console.error("Get user error:", error)
-    return NextResponse.json(
-      { error: "Failed to fetch user" },
-      { status: 500 }
-    )
+    const { data, error } = await supabase
+      .from("users")
+      .select("id, email, first_name, last_name, roles, created_at, affiliation")
+      .eq("id", params.id)
+      .single()
+
+    if (error) return NextResponse.json({ error: error.message }, { status: 404 })
+    return NextResponse.json(data)
+  } catch (error) {
+    return NextResponse.json({ error: "Internal server error" }, { status: 500 })
   }
-})
+}
 
-export const PUT = authMiddleware(async (
-  req: AuthRequest,
-  { params }: { params: Promise<{ id: string }> }
-) => {
+export async function PATCH(
+  request: NextRequest,
+  { params }: { params: { id: string } }
+) {
   try {
-    const { id } = await params
-    const body = await req.json()
-    const data = updateUserSchema.parse(body)
-
-    // Check if user exists
-    const existingUser = await prisma.user.findUnique({
-      where: { id },
-      select: {
-        id: true,
-        roles: true,
-      },
-    })
-
-    if (!existingUser) {
-      return NextResponse.json(
-        { error: "User not found" },
-        { status: 404 }
-      )
+    const body = await request.json()
+    const supabase = await createClient()
+    // Allow self or admin only
+    const { data: { user: authUser }, error: authUserError } = await supabase.auth.getUser()
+    if (authUserError || !authUser) {
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
     }
 
-    // Authorization checks
-    const isOwnProfile = id === req.user?.userId
-    const isAdmin = req.user?.roles.includes("admin")
+    let isAdmin = false
+    const { authorized } = await requireAdmin(request)
+    isAdmin = authorized
 
-    // Users can only update their own profile (without roles/journalId)
-    if (isOwnProfile && !isAdmin) {
-      // Remove restricted fields
-      delete data.roles
-      delete data.journalId
-    } else if (!isAdmin) {
-      return NextResponse.json(
-        { error: "Unauthorized. You can only update your own profile" },
-        { status: 403 }
-      )
+    if (!isAdmin && authUser.id !== params.id) {
+      return NextResponse.json({ error: "Forbidden" }, { status: 403 })
     }
 
-    // Verify ORCID uniqueness if provided
-    if (data.orcid && data.orcid !== existingUser.orcid) {
-      const existingWithOrcid = await prisma.user.findUnique({
-        where: { orcid: data.orcid },
-      })
+    const { password, ...updateData } = body
 
-      if (existingWithOrcid) {
-        return NextResponse.json(
-          { error: "ORCID already associated with another user" },
-          { status: 400 }
-        )
-      }
-    }
+    const { data, error } = await supabase
+      .from("users")
+      .update(updateData)
+      .eq("id", params.id)
+      .select("id, email, first_name, last_name, roles")
+      .single()
 
-    // Verify journal exists if journalId provided
-    if (data.journalId) {
-      const journal = await prisma.journal.findUnique({
-        where: { id: data.journalId },
-      })
-
-      if (!journal) {
-        return NextResponse.json(
-          { error: "Journal not found" },
-          { status: 400 }
-        )
-      }
-    }
-
-    const user = await prisma.user.update({
-      where: { id },
-      data: {
-        ...data,
-      },
-      select: {
-        id: true,
-        email: true,
-        firstName: true,
-        lastName: true,
-        affiliation: true,
-        orcid: true,
-        roles: true,
-        bio: true,
-        avatar: true,
-        journalId: true,
-        createdAt: true,
-        updatedAt: true,
-      },
-    })
-
-    return NextResponse.json(user)
-  } catch (error: any) {
-    if (error instanceof z.ZodError) {
-      return NextResponse.json(
-        { error: "Invalid input", details: error.errors },
-        { status: 400 }
-      )
-    }
-
-    console.error("Update user error:", error)
-    return NextResponse.json(
-      { error: "Failed to update user" },
-      { status: 500 }
-    )
+    if (error) return NextResponse.json({ error: error.message }, { status: 500 })
+    return NextResponse.json(data)
+  } catch (error) {
+    return NextResponse.json({ error: "Internal server error" }, { status: 500 })
   }
-})
+}
 
+export async function DELETE(
+  request: NextRequest,
+  { params }: { params: { id: string } }
+) {
+  try {
+    const { authorized, error: authError } = await requireAdmin(request)
+    if (!authorized) {
+      return NextResponse.json({ error: authError || "Forbidden" }, { status: 403 })
+    }
+
+    const supabase = await createClient()
+    const { error } = await supabase
+      .from("users")
+      .delete()
+      .eq("id", params.id)
+
+    if (error) return NextResponse.json({ error: error.message }, { status: 500 })
+    return NextResponse.json({ success: true })
+  } catch (error) {
+    return NextResponse.json({ error: "Internal server error" }, { status: 500 })
+  }
+}

@@ -136,7 +136,7 @@ export function ProductionPanel({ submission, isEditor, onStatusChange, onPublis
       label: newGalley.label,
       locale: newGalley.locale,
       fileId: `file-${Date.now()}`,
-      fileName: `${submission.id.slice(-6)}_galley.${newGalley.fileType}`,
+      fileName: `${String(submission.id).slice(-6)}_galley.${newGalley.fileType}`,
       fileType: newGalley.fileType,
       sequence: (assignment.galleys?.length || 0) + 1,
       isRemote: false,

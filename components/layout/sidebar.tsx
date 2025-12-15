@@ -8,8 +8,7 @@ import { useEffect, useState, useCallback, useRef, useMemo } from "react"
 import { cn } from "@/lib/utils"
 import { useAuth } from "@/lib/hooks/use-auth"
 import { ROUTES } from "@/lib/constants"
-import { journalService } from "@/lib/services/journal-service"
-import { initializeStorage } from "@/lib/storage"
+import { apiGet } from "@/lib/api/client"
 import {
   LayoutDashboard,
   FileText,
@@ -50,6 +49,7 @@ import { Avatar, AvatarFallback } from "@/components/ui/avatar"
 import { ScrollArea } from "@/components/ui/scroll-area"
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip"
 import type { Journal } from "@/lib/types"
+import { SkeletonSidebar } from "@/components/ui/skeleton-card"
 
 interface SidebarProps {
   isOpen?: boolean
@@ -144,7 +144,7 @@ function CollapsibleSection({
 export function Sidebar({ isOpen, onClose }: SidebarProps) {
   const pathname = usePathname()
   const router = useRouter()
-  const { user, currentJournal, setCurrentJournal, logout, switchRole, isAdmin, isEditor, isReviewer, isAuthor } =
+  const { user, currentJournal, setCurrentJournal, logout, switchRole, isAdmin, isManager, isEditor, isReviewer, isAuthor, isManagerOrAdmin, isManagerOrEditor, isLoading } =
     useAuth()
   const [journalFromUrl, setJournalFromUrl] = useState<Journal | null>(null)
   const [collapsed, setCollapsed] = useState(false)
@@ -155,22 +155,28 @@ export function Sidebar({ isOpen, onClose }: SidebarProps) {
   const journalSetRef = useRef<string | null>(null)
 
   useEffect(() => {
-    initializeStorage()
     const journalPathMatch = pathname.match(/^\/journal\/([^/]+)/)
-    if (journalPathMatch) {
-      const journalId = journalPathMatch[1]
-      const journal = journalService.getByIdOrPath(journalId)
-      if (journal) {
-        setJournalFromUrl(journal)
-        if (journalSetRef.current !== journal.id) {
-          journalSetRef.current = journal.id
-          setCurrentJournal(journal)
-        }
-      }
-    } else {
+    if (!journalPathMatch) {
       setJournalFromUrl(null)
       journalSetRef.current = null
+      return
     }
+
+    const journalIdOrPath = journalPathMatch[1]
+    apiGet<any[]>("/api/journals")
+      .then((journals) => {
+        const list = Array.isArray(journals) ? journals : []
+        const journal = list.find((j: any) => String(j?.id) === String(journalIdOrPath) || String(j?.path) === String(journalIdOrPath))
+        if (!journal) return
+        setJournalFromUrl(journal)
+        if (journalSetRef.current !== String(journal.id)) {
+          journalSetRef.current = String(journal.id)
+          setCurrentJournal(journal)
+        }
+      })
+      .catch(() => {
+        // Ignore
+      })
   }, [pathname, setCurrentJournal]) // Removed currentJournal from dependencies
 
   const activeJournal = journalFromUrl || currentJournal
@@ -179,59 +185,119 @@ export function Sidebar({ isOpen, onClose }: SidebarProps) {
     const journalPath = activeJournal?.path
 
     return [
+      // OJS PKP 3.3 Author section - sesuai dengan struktur OJS
       {
-        id: "submissions",
-        title: "Submissions",
-        icon: FileText,
+        id: "author",
+        title: "Author",
+        icon: Send,
         defaultOpen: true,
+        roles: ["author"],
         items: [
           {
-            title: "Dashboard",
-            href: journalPath ? ROUTES.journalDashboard(journalPath) : ROUTES.DASHBOARD,
-            icon: LayoutDashboard,
-          },
-          {
-            title: "All Submissions",
-            href: journalPath ? ROUTES.journalSubmissions(journalPath) : ROUTES.SUBMISSIONS,
+            title: "Active Submissions",
+            href: journalPath
+              ? `${ROUTES.journalSubmissions(journalPath)}?status=active`
+              : `${ROUTES.MY_SUBMISSIONS}?status=active`,
             icon: FolderOpen,
-            roles: ["admin", "editor"],
-          },
-          {
-            title: "My Submissions",
-            href: ROUTES.MY_SUBMISSIONS,
-            icon: Send,
             roles: ["author"],
           },
           {
-            title: "Review Queue",
+            title: "Incomplete Submissions",
+            href: journalPath
+              ? `${ROUTES.journalSubmissions(journalPath)}?status=incomplete`
+              : `${ROUTES.MY_SUBMISSIONS}?status=incomplete`,
+            icon: FileText,
+            roles: ["author"],
+          },
+          {
+            title: "New Submission",
+            href: journalPath ? ROUTES.newSubmission(journalPath) : ROUTES.newSubmission(),
+            icon: Send,
+            roles: ["author"],
+          },
+        ],
+      },
+      // OJS-like Reviewer section
+      // OJS PKP 3.3: Reviewer section hanya untuk Reviewer, Editor (bukan Manager)
+      // Manager tidak perlu Reviewer section karena sudah punya akses editorial penuh
+      {
+        id: "reviewer",
+        title: "Reviewer",
+        icon: ClipboardCheck,
+        defaultOpen: true,
+        roles: ["reviewer"], // Hanya untuk Reviewer saja, bukan Editor/Manager
+        items: [
+          {
+            title: "Review Assignments",
             href: journalPath ? ROUTES.journalReviews(journalPath) : ROUTES.REVIEWS,
             icon: ClipboardCheck,
-            roles: ["admin", "editor", "reviewer"],
+            roles: ["reviewer"], // Hanya untuk Reviewer
           },
         ],
       },
       {
-        id: "management",
-        title: "Management",
-        icon: BookOpen,
+        id: "submissions",
+        title: "Editorial",
+        icon: FileText,
         defaultOpen: true,
-        roles: ["admin", "editor"],
+        roles: ["manager", "editor", "admin"], // OJS PKP 3.3: Manager and Editor have editorial access
         items: [
           {
-            title: "Issues",
+            title: "Editor Dashboard",
+            href: journalPath ? ROUTES.journalDashboard(journalPath) : ROUTES.EDITOR,
+            icon: LayoutDashboard,
+            roles: ["manager", "editor", "admin"], // Manager and Editor
+          },
+          {
+            title: "Unassigned",
+            href: journalPath ? ROUTES.journalSubmissions(journalPath) : ROUTES.SUBMISSIONS,
+            icon: FolderOpen,
+            roles: ["admin", "manager", "editor"], // Manager and Editor
+          },
+          {
+            title: "In Review",
+            href: journalPath ? `${ROUTES.journalSubmissions(journalPath)}?stage=review` : `${ROUTES.SUBMISSIONS}?stage=review`,
+            icon: Workflow,
+            roles: ["admin", "manager", "editor"], // Manager and Editor
+          },
+          {
+            title: "Copyediting",
+            href: journalPath ? `${ROUTES.journalSubmissions(journalPath)}?stage=copyediting` : `${ROUTES.SUBMISSIONS}?stage=copyediting`,
+            icon: FileText,
+            roles: ["admin", "manager", "editor"], // Manager and Editor
+          },
+          {
+            title: "Production",
+            href: journalPath ? `${ROUTES.journalSubmissions(journalPath)}?stage=production` : `${ROUTES.SUBMISSIONS}?stage=production`,
+            icon: BookMarked,
+            roles: ["admin", "manager", "editor"], // Manager and Editor
+          },
+          {
+            title: "Archives",
+            href: journalPath ? `${ROUTES.journalSubmissions(journalPath)}?stage=archives` : `${ROUTES.SUBMISSIONS}?stage=archives`,
+            icon: Archive,
+            roles: ["admin", "manager", "editor"], // Manager and Editor
+          },
+        ],
+      },
+      {
+        id: "issues",
+        title: "Issues",
+        icon: BookOpen,
+        defaultOpen: true,
+        roles: ["admin", "manager"], // OJS PKP 3.3: Issues is Manager-only (and Site Admin)
+        items: [
+          {
+            title: "Issue Manager",
             href: journalPath ? ROUTES.journalIssues(journalPath) : ROUTES.ISSUES,
             icon: BookOpen,
-            roles: ["admin", "editor"],
+            roles: ["admin", "manager"], // Manager-only in OJS
           },
           {
             title: "Publications",
             href: journalPath ? ROUTES.journalPublications(journalPath) : ROUTES.PUBLICATIONS,
             icon: Newspaper,
-          },
-          {
-            title: "Archive",
-            href: ROUTES.ARCHIVE,
-            icon: Archive,
+            roles: ["admin", "manager", "editor"], // Manager and Editor can see publications
           },
         ],
       },
@@ -240,19 +306,19 @@ export function Sidebar({ isOpen, onClose }: SidebarProps) {
         title: "Statistics & Reports",
         icon: BarChart3,
         defaultOpen: false,
-        roles: ["admin", "editor"],
+        roles: ["admin", "manager", "editor"], // OJS: Manager and Editor
         items: [
           {
             title: "Statistics",
             href: journalPath ? ROUTES.journalStatistics(journalPath) : "/statistics",
             icon: BarChart3,
-            roles: ["admin", "editor"],
+            roles: ["admin", "manager", "editor"],
           },
           {
             title: "Subscriptions",
             href: journalPath ? ROUTES.journalSubscriptions(journalPath) : "/subscriptions",
             icon: CreditCard,
-            roles: ["admin", "editor"],
+            roles: ["admin", "manager"], // Manager and Admin only
           },
         ],
       },
@@ -261,19 +327,19 @@ export function Sidebar({ isOpen, onClose }: SidebarProps) {
         title: "Settings",
         icon: Settings,
         defaultOpen: false,
-        roles: ["admin", "editor"],
+        roles: ["admin", "manager"], // OJS PKP 3.3: Settings is Manager and Admin only
         items: [
           {
             title: "Journal",
             href: journalPath ? ROUTES.journalSettings(journalPath) : ROUTES.SETTINGS,
             icon: Settings,
-            roles: ["admin", "editor"],
+            roles: ["admin", "manager"], // Manager and Admin only
           },
           {
             title: "Website",
             href: journalPath ? `${ROUTES.journalSettings(journalPath)}?tab=website` : `${ROUTES.SETTINGS}?tab=website`,
             icon: Globe,
-            roles: ["admin", "editor"],
+            roles: ["admin", "manager"], // Manager and Admin only
           },
           {
             title: "Workflow",
@@ -281,7 +347,7 @@ export function Sidebar({ isOpen, onClose }: SidebarProps) {
               ? `${ROUTES.journalSettings(journalPath)}?tab=workflow`
               : `${ROUTES.SETTINGS}?tab=workflow`,
             icon: Workflow,
-            roles: ["admin", "editor"],
+            roles: ["admin", "manager"], // Manager and Admin only
           },
           {
             title: "Distribution",
@@ -289,13 +355,13 @@ export function Sidebar({ isOpen, onClose }: SidebarProps) {
               ? `${ROUTES.journalSettings(journalPath)}?tab=distribution`
               : `${ROUTES.SETTINGS}?tab=distribution`,
             icon: Share2,
-            roles: ["admin", "editor"],
+            roles: ["admin", "manager"], // Manager and Admin only
           },
           {
             title: "Email Templates",
             href: journalPath ? `/journal/${journalPath}/emails` : "/emails",
             icon: Mail,
-            roles: ["admin", "editor"],
+            roles: ["admin", "manager"], // Manager and Admin only
           },
         ],
       },
@@ -304,19 +370,19 @@ export function Sidebar({ isOpen, onClose }: SidebarProps) {
         title: "Tools & Users",
         icon: Wrench,
         defaultOpen: false,
-        roles: ["admin"],
+        roles: ["admin", "manager"], // OJS: Manager and Admin
         items: [
           {
             title: "Import/Export",
             href: journalPath ? ROUTES.journalTools(journalPath) : ROUTES.TOOLS,
             icon: Wrench,
-            roles: ["admin", "editor"],
+            roles: ["admin", "manager"], // Manager and Admin
           },
           {
-            title: "Users",
+            title: "Users & Roles",
             href: ROUTES.USERS,
             icon: Users,
-            roles: ["admin"],
+            roles: ["admin", "manager"], // OJS: Manager and Admin can manage users
           },
         ],
       },
@@ -351,19 +417,115 @@ export function Sidebar({ isOpen, onClose }: SidebarProps) {
     }
   }, []) // Empty dependency array - run only on mount
 
+  // Get user roles - ensure it's an array and merge from multiple sources
+  const userRoles = Array.isArray(user?.roles) ? user.roles : []
+
+  // Debug: Log user roles (remove in production if needed)
+  useEffect(() => {
+    console.log('=== SIDEBAR DEBUG START ===')
+    console.log('[Sidebar Debug] User object:', user)
+    console.log('[Sidebar Debug] User email:', user?.email)
+    console.log('[Sidebar Debug] User roles (from user object):', user?.roles)
+    console.log('[Sidebar Debug] User role_ids (from user object):', user?.role_ids)
+    console.log('[Sidebar Debug] userRoles array:', userRoles)
+    console.log('[Sidebar Debug] userRoles length:', userRoles.length)
+    console.log('[Sidebar Debug] isManager:', isManager)
+    console.log('[Sidebar Debug] isAdmin:', isAdmin)
+    console.log('[Sidebar Debug] isEditor:', isEditor)
+    console.log('[Sidebar Debug] isAuthor:', isAuthor)
+    console.log('[Sidebar Debug] isReviewer:', isReviewer)
+    console.log('[Sidebar Debug] navSections count:', navSections.length)
+    console.log('[Sidebar Debug] navSections:', navSections.map(s => ({ id: s.id, roles: s.roles })))
+    console.log('=== SIDEBAR DEBUG END ===')
+  }, [user, userRoles, isManager, isAdmin, isEditor, isAuthor, isReviewer, navSections])
+
+  // OJS PKP 3.3: Users can have multiple roles
+  // Manager/Editor can also be Author/Reviewer and should see those sections
+
   const filteredSections = navSections
     .filter((section) => {
-      if (!section.roles) return true
-      return section.roles.some((role) => user?.roles.includes(role as any))
+      // If no roles specified in section definition, show it (but should be rare)
+      if (!section.roles) {
+        return false
+      }
+
+      // If user is not loaded yet, don't show sections that require roles
+      if (!user || !userRoles || userRoles.length === 0) {
+        return false
+      }
+
+      // Author section - only show for pure Author role (no higher roles)
+      if (section.id === "author") {
+        const hasAuthor = userRoles.includes('author')
+        const hasHigher = userRoles.some((r) => r === 'manager' || r === 'editor' || r === 'admin')
+        const shouldShow = hasAuthor && !hasHigher
+        console.log(`[Sidebar Debug] Author section shouldShow:`, shouldShow)
+        return shouldShow
+      }
+
+      // Reviewer section - only show for pure Reviewer role (no higher roles)
+      if (section.id === "reviewer") {
+        const hasReviewer = userRoles.includes('reviewer')
+        const hasHigher = userRoles.some((r) => r === 'manager' || r === 'editor' || r === 'admin')
+        const shouldShow = hasReviewer && !hasHigher
+        console.log(`[Sidebar Debug] Reviewer section shouldShow:`, shouldShow)
+        return shouldShow
+      }
+
+      // Administration section - ONLY for Site Admin
+      if (section.id === "administration") {
+        const shouldShow = userRoles.includes('admin')
+        console.log(`[Sidebar Debug] Administration section shouldShow:`, shouldShow)
+        return shouldShow
+      }
+
+      // For other sections, check if user has any of the required roles
+      const hasRequiredRole = section.roles.some((role) => userRoles.includes(role as any))
+      console.log(`[Sidebar Debug] Section '${section.id}' hasRequiredRole:`, hasRequiredRole, { sectionRoles: section.roles, userRoles })
+      return hasRequiredRole
     })
     .map((section) => ({
       ...section,
       items: section.items.filter((item) => {
+        // If no roles specified for item, show it (inherits from section)
         if (!item.roles) return true
-        return item.roles.some((role) => user?.roles.includes(role as any))
+
+        // If user not loaded, hide item
+        if (!user || !userRoles || userRoles.length === 0) return false
+
+        // Special handling for Author section items
+        if (section.id === "author") {
+          return userRoles.includes('author')
+        }
+
+        // Special handling for Reviewer section items
+        if (section.id === "reviewer") {
+          return userRoles.includes('reviewer')
+        }
+
+        // Administration items - only for Site Admin
+        if (section.id === "administration") {
+          return userRoles.includes('admin')
+        }
+
+        // For other items, check if user has any of the required roles
+        return item.roles.some((role) => userRoles.includes(role as any))
       }),
     }))
     .filter((section) => section.items.length > 0)
+
+  // Debug: Log filtered sections
+  useEffect(() => {
+    console.log('=== FILTERED SECTIONS DEBUG ===')
+    console.log('[Sidebar Debug] filteredSections count:', filteredSections.length)
+    console.log('[Sidebar Debug] filteredSections:', filteredSections.map(s => ({
+      id: s.id,
+      title: s.title,
+      itemCount: s.items.length,
+      items: s.items.map(i => i.title)
+    })))
+    console.log('=== FILTERED SECTIONS END ===')
+  }, [filteredSections])
 
   const handleLogout = () => {
     logout()
@@ -442,46 +604,49 @@ export function Sidebar({ isOpen, onClose }: SidebarProps) {
         )}
 
         <ScrollArea className="flex-1 px-2 py-2">
-          <nav className="space-y-1">
-            {filteredSections.map((section) => (
-              <div key={section.id}>
-                {collapsed ? (
-                  // Collapsed mode: show only icons with tooltips
-                  <div className="space-y-1">
-                    {section.items.map((item) => (
-                      <Tooltip key={item.title}>
-                        <TooltipTrigger asChild>
-                          <Link
-                            href={item.href}
-                            onClick={onClose}
-                            className={cn(
-                              "flex h-9 w-9 items-center justify-center rounded-md mx-auto transition-colors",
-                              isItemActive(item.href)
-                                ? "bg-sidebar-primary text-sidebar-primary-foreground"
-                                : "text-sidebar-foreground/70 hover:bg-sidebar-accent hover:text-sidebar-foreground",
-                            )}
-                          >
-                            <item.icon className="h-4 w-4" />
-                          </Link>
-                        </TooltipTrigger>
-                        <TooltipContent side="right" className="font-medium">
-                          {item.title}
-                        </TooltipContent>
-                      </Tooltip>
-                    ))}
-                  </div>
-                ) : (
-                  <CollapsibleSection
-                    section={section}
-                    isOpen={openSections.has(section.id)}
-                    onToggle={() => toggleSection(section.id)}
-                    pathname={pathname}
-                    onClose={onClose}
-                  />
-                )}
-              </div>
-            ))}
-          </nav>
+          {isLoading ? (
+            <SkeletonSidebar />
+          ) : (
+            <nav className="space-y-1">
+              {filteredSections.map((section) => (
+                <div key={section.id}>
+                  {collapsed ? (
+                    <div className="space-y-1">
+                      {section.items.map((item) => (
+                        <Tooltip key={item.title}>
+                          <TooltipTrigger asChild>
+                            <Link
+                              href={item.href}
+                              onClick={onClose}
+                              className={cn(
+                                "flex h-9 w-9 items-center justify-center rounded-md mx-auto transition-colors",
+                                isItemActive(item.href)
+                                  ? "bg-sidebar-primary text-sidebar-primary-foreground"
+                                  : "text-sidebar-foreground/70 hover:bg-sidebar-accent hover:text-sidebar-foreground",
+                              )}
+                            >
+                              <item.icon className="h-4 w-4" />
+                            </Link>
+                          </TooltipTrigger>
+                          <TooltipContent side="right" className="font-medium">
+                            {item.title}
+                          </TooltipContent>
+                        </Tooltip>
+                      ))}
+                    </div>
+                  ) : (
+                    <CollapsibleSection
+                      section={section}
+                      isOpen={openSections.has(section.id)}
+                      onToggle={() => toggleSection(section.id)}
+                      pathname={pathname}
+                      onClose={onClose}
+                    />
+                  )}
+                </div>
+              ))}
+            </nav>
+          )}
         </ScrollArea>
 
         {/* User dropdown section remains unchanged */}
@@ -508,7 +673,7 @@ export function Sidebar({ isOpen, onClose }: SidebarProps) {
                         {user?.firstName} {user?.lastName}
                       </span>
                       <span className="truncate text-[10px] text-sidebar-foreground/60 capitalize">
-                        {user?.roles[0] || "User"}
+                        {Array.isArray(user?.roles) && user.roles.length > 0 ? user.roles[0] : "User"}
                       </span>
                     </div>
                     <ChevronDown className="h-3.5 w-3.5 shrink-0 opacity-50" />
@@ -533,13 +698,19 @@ export function Sidebar({ isOpen, onClose }: SidebarProps) {
                   Admin
                 </DropdownMenuItem>
               )}
-              {(isEditor || isAdmin) && (
+              {(isManager || isAdmin) && (
+                <DropdownMenuItem onClick={() => switchRole("manager")}>
+                  <Settings className="mr-2 h-4 w-4" />
+                  Manager
+                </DropdownMenuItem>
+              )}
+              {(isEditor || isAdmin || isManager) && (
                 <DropdownMenuItem onClick={() => switchRole("editor")}>
                   <FileText className="mr-2 h-4 w-4" />
                   Editor
                 </DropdownMenuItem>
               )}
-              {(isAuthor || isAdmin) && (
+              {(isAuthor || isAdmin || isManager) && (
                 <DropdownMenuItem onClick={() => switchRole("author")}>
                   <Send className="mr-2 h-4 w-4" />
                   Author

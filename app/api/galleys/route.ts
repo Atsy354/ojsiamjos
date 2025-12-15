@@ -1,65 +1,42 @@
-import { createRouteHandlerClient } from '@/lib/supabase/server';
-import { NextResponse } from 'next/server';
+import { NextRequest, NextResponse } from "next/server"
+import { createClient } from "@/lib/supabase/server"
 
-export const dynamic = 'force-dynamic';
+export async function GET(request: NextRequest) {
+    try {
+        const supabase = await createClient()
+        const { searchParams } = new URL(request.url)
+        const publicationId = searchParams.get("publicationId")
 
-// GET: List galleys for a submission
-export async function GET(request: Request) {
-    const supabase = await createRouteHandlerClient();
-    const { searchParams } = new URL(request.url);
-    const submissionId = searchParams.get('submissionId');
+        let query = supabase.from("galleys").select("*").order("seq", { ascending: true })
+        if (publicationId) query = query.eq("publication_id", publicationId)
 
-    if (!submissionId) return NextResponse.json([], { status: 400 });
-
-    const { data: galleys, error } = await supabase
-        .from('publication_galleys')
-        .select(`
-            *,
-            submission_files (
-                original_file_name,
-                file_id
-            )
-        `)
-        .eq('submission_id', submissionId)
-        .order('seq', { ascending: true });
-
-    if (error) return NextResponse.json({ error: error.message }, { status: 500 });
-    return NextResponse.json(galleys);
+        const { data, error } = await query
+        if (error) return NextResponse.json({ error: error.message }, { status: 500 })
+        return NextResponse.json(data)
+    } catch (error) {
+        return NextResponse.json({ error: "Internal server error" }, { status: 500 })
+    }
 }
 
-// POST: Create a new Galley (Label only initially)
-export async function POST(request: Request) {
-    const supabase = await createRouteHandlerClient();
-    const { submissionId, label } = await request.json();
+export async function POST(request: NextRequest) {
+    try {
+        const body = await request.json()
+        const supabase = await createClient()
+        const { publicationId, label, locale, fileId } = body
 
-    const { data: session } = await supabase.auth.getSession();
-    if (!session.session) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+        if (!publicationId || !label) {
+            return NextResponse.json({ error: "Publication ID and label required" }, { status: 400 })
+        }
 
-    const { data: galley, error } = await supabase
-        .from('publication_galleys')
-        .insert({
-            submission_id: submissionId,
-            label: label,
-            is_approved: false
-        })
-        .select()
-        .single();
+        const { data, error } = await supabase
+            .from("galleys")
+            .insert({ publication_id: publicationId, label, locale, file_id: fileId })
+            .select()
+            .single()
 
-    if (error) return NextResponse.json({ error: error.message }, { status: 500 });
-
-    return NextResponse.json(galley);
-}
-
-// PUT: Link a file to a Galley
-export async function PUT(request: Request) {
-    const supabase = await createRouteHandlerClient();
-    const { galleyId, submissionFileId } = await request.json();
-
-    const { error } = await supabase
-        .from('publication_galleys')
-        .update({ submission_file_id: submissionFileId })
-        .eq('galley_id', galleyId);
-
-    if (error) return NextResponse.json({ error: error.message }, { status: 500 });
-    return NextResponse.json({ success: true });
+        if (error) return NextResponse.json({ error: error.message }, { status: 500 })
+        return NextResponse.json(data, { status: 201 })
+    } catch (error) {
+        return NextResponse.json({ error: "Internal server error" }, { status: 500 })
+    }
 }
