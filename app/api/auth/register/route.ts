@@ -247,10 +247,16 @@ export async function POST(request: NextRequest) {
         journalId: user.journal_id ?? null,
       },
       session: authData.session,
-      requiresEmailConfirmation: !authData.session,
-      message: !authData.session
-        ? "Registration successful. Please check your email to confirm your account before signing in."
-        : "Registration successful.",
+      requiresEmailConfirmation:
+        !authData.session &&
+        !(authData.user as any)?.email_confirmed_at &&
+        !(authData.user as any)?.confirmed_at,
+      message:
+        !authData.session &&
+        !(authData.user as any)?.email_confirmed_at &&
+        !(authData.user as any)?.confirmed_at
+          ? "Registration successful. Please check your email to confirm your account before signing in."
+          : "Registration successful.",
     }, { status: 201 })
   } catch (error) {
     console.error("Register error:", error)

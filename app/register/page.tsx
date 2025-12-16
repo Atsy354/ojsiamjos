@@ -204,19 +204,46 @@ export default function RegisterPage() {
   return (
     <div className="min-h-screen bg-background">
       {/* Header */}
-      <div className="border-b bg-white/80 backdrop-blur-sm">
-        <div className="container mx-auto px-4 py-4">
-          <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between mb-6 sm:mb-8">
-            <Link href={ROUTES.HOME} className="flex items-center gap-2 text-muted-foreground hover:text-foreground">
-              <ArrowLeft className="h-4 w-4" />
-              <span>Back to Home</span>
-            </Link>
-            <Link href={ROUTES.LOGIN} className="text-sm text-primary hover:text-primary/90 font-medium">
-              Already have an account? Sign in
-            </Link>
+      <header className="bg-primary text-primary-foreground">
+        <div className="border-b border-primary/60">
+          <div className="mx-auto flex min-h-8 max-w-7xl flex-wrap items-center justify-between gap-x-4 gap-y-1 px-4 py-1 text-xs">
+            <div className="flex flex-wrap items-center gap-x-4 gap-y-1">
+              <Link href={ROUTES.HOME} className="hover:underline">
+                Home
+              </Link>
+              <span className="text-white/50">|</span>
+              <Link href={ROUTES.BROWSE} className="hover:underline">
+                Browse
+              </Link>
+              <span className="text-white/50">|</span>
+              <Link href={ROUTES.ARCHIVE} className="hover:underline">
+                Archive
+              </Link>
+            </div>
           </div>
         </div>
-      </div>
+        <div className="mx-auto max-w-7xl px-4 py-4">
+          <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+            <Link href={ROUTES.HOME} className="flex items-center gap-2">
+              <BookOpen className="h-8 w-8" />
+              <span className="text-xl font-bold">IAMJOS</span>
+            </Link>
+            <div className="flex w-full items-center gap-2 sm:w-auto">
+              <Button
+                asChild
+                variant="outline"
+                size="sm"
+                className="border-white bg-transparent text-white hover:bg-white hover:text-primary"
+              >
+                <Link href={ROUTES.LOGIN}>Sign In</Link>
+              </Button>
+              <Button asChild size="sm" className="bg-accent text-accent-foreground hover:bg-accent/90">
+                <Link href={ROUTES.REGISTER}>Register</Link>
+              </Button>
+            </div>
+          </div>
+        </div>
+      </header>
 
       <div className="container mx-auto px-4 py-6 sm:py-8">
         <div className="max-w-2xl mx-auto">
