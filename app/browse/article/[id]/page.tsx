@@ -190,11 +190,6 @@ export default function ArticleDetailPage() {
                 Archive
               </Link>
             </div>
-            <div className="flex flex-wrap items-center gap-x-4 gap-y-1">
-              <Link href={ROUTES.LOGIN} className="hover:underline">
-                Sign In
-              </Link>
-            </div>
           </div>
         </div>
         <div className="mx-auto max-w-7xl px-4 py-4">
@@ -213,9 +208,6 @@ export default function ArticleDetailPage() {
               </div>
             </div>
             <nav className="flex w-full flex-wrap items-center gap-2 sm:w-auto sm:gap-4">
-              <Link href={ROUTES.LOGIN} className="hover:underline">
-                Sign In
-              </Link>
               <Button
                 asChild
                 variant="outline"

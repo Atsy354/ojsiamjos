@@ -108,14 +108,6 @@ export default function JournalDetailPage() {
                 Browse
               </Link>
             </div>
-            <div className="flex flex-wrap items-center gap-x-4 gap-y-1">
-              <Link href={ROUTES.LOGIN} className="hover:underline">
-                Sign In
-              </Link>
-              <Link href={ROUTES.REGISTER} className="hover:underline">
-                Register
-              </Link>
-            </div>
           </div>
         </div>
         <div className="mx-auto max-w-7xl px-4 py-4">
