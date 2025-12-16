@@ -1,16 +1,17 @@
 import { NextRequest, NextResponse } from "next/server"
-import { createClient } from "@/lib/supabase/server"
+import { createClient, supabaseAdmin } from "@/lib/supabase/server"
 
 export async function GET(_req: NextRequest) {
   try {
     const supabase = await createClient()
+    const admin = supabaseAdmin
     const { data: authUser, error: userErr } = await supabase.auth.getUser()
     if (userErr || !authUser?.user) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
     }
 
     // Load app user row
-    const { data: user, error: userError } = await supabase
+    const { data: user, error: userError } = await admin
       .from("users")
       .select("*")
       .eq("id", authUser.user.id)
@@ -22,7 +23,7 @@ export async function GET(_req: NextRequest) {
 
     // Merge roles from membership
     const rolesSet = new Set<string>(Array.isArray(user.roles) ? user.roles : [])
-    const { data: memberships } = await supabase
+    const { data: memberships } = await admin
       .from("user_journal_roles")
       .select("role")
       .eq("user_id", user.id)

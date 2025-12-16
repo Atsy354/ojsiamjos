@@ -4,7 +4,7 @@ import bcrypt from "bcryptjs"
 
 export async function POST(request: NextRequest) {
   try {
-    const origin = request.headers.get("origin") ?? ""
+    const origin = request.headers.get("origin") ?? request.nextUrl.origin
     const {
       email,
       password,
@@ -84,11 +84,18 @@ export async function POST(request: NextRequest) {
       email,
       password,
       options: {
-        emailRedirectTo: origin ? `${origin}${origin.endsWith("/") ? "" : ""}login` : undefined,
+        emailRedirectTo: origin ? new URL("/login", origin).toString() : undefined,
       },
     })
 
     if (authError) {
+      const msg = typeof authError.message === "string" ? authError.message : ""
+      if (msg.toLowerCase().includes("already registered") || msg.toLowerCase().includes("already exists")) {
+        return NextResponse.json(
+          { error: "Email is already registered. Please sign in or use Forgot Password." },
+          { status: 400 }
+        )
+      }
       return NextResponse.json(
         { error: authError.message },
         { status: 400 }

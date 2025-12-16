@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server"
-import { createClient } from "@/lib/supabase/server"
+import { createClient, supabaseAdmin } from "@/lib/supabase/server"
 
 export async function POST(request: NextRequest) {
   try {
@@ -13,6 +13,7 @@ export async function POST(request: NextRequest) {
     }
 
     const supabase = await createClient()
+    const admin = supabaseAdmin
 
     // Sign in with Supabase Auth
     const { data, error } = await supabase.auth.signInWithPassword({
@@ -28,10 +29,11 @@ export async function POST(request: NextRequest) {
     }
 
     // Get user details from database
-    const { data: user, error: userError } = await supabase
+    const authUserId = data.user?.id
+    const { data: user, error: userError } = await admin
       .from("users")
       .select("*")
-      .eq("email", email)
+      .eq("id", authUserId)
       .single()
 
     if (userError || !user) {
@@ -43,7 +45,7 @@ export async function POST(request: NextRequest) {
 
     // Merge roles from per-journal memberships (user_journal_roles)
     const rolesSet = new Set<string>(Array.isArray(user.roles) ? user.roles : [])
-    const { data: memberships } = await supabase
+    const { data: memberships } = await admin
       .from("user_journal_roles")
       .select("role")
       .eq("user_id", user.id)
