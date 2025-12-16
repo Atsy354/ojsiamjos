@@ -59,12 +59,7 @@ export async function POST(request: NextRequest) {
       .eq("email", email)
       .single()
 
-    if (existingUser) {
-      return NextResponse.json(
-        { error: "User already exists" },
-        { status: 400 }
-      )
-    }
+    const existingUserId = existingUser?.id ?? null
 
     if (typeof username === "string" && username.trim()) {
       const { data: existingUsername, error: usernameCheckError } = await admin
@@ -100,6 +95,21 @@ export async function POST(request: NextRequest) {
         { error: authError.message },
         { status: 400 }
       )
+    }
+
+    // If the Auth user was successfully created but a stale app user row exists with the same email,
+    // clean it up to avoid unique constraint conflicts (best-effort).
+    if (existingUserId && authData.user?.id && existingUserId !== authData.user.id) {
+      try {
+        await admin.from("user_journal_roles").delete().eq("user_id", existingUserId)
+      } catch {
+        // best-effort
+      }
+      try {
+        await admin.from("users").delete().eq("id", existingUserId)
+      } catch {
+        // best-effort
+      }
     }
 
     // Hash password for database storage
