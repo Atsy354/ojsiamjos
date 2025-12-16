@@ -107,7 +107,7 @@ export async function POST(request: NextRequest) {
     const baseInsert: Record<string, any> = {
       id: authData.user?.id,
       email,
-      password: hashedPassword,
+      password_hash: hashedPassword,
       first_name: firstName,
       last_name: lastName,
       roles: requestedRoles,
@@ -172,10 +172,12 @@ export async function POST(request: NextRequest) {
       if (!dbError) break
 
       const msg = typeof dbError?.message === "string" ? dbError.message : ""
-      const m = msg.match(/column\s+\"([^\"]+)\"/i)
-      if (!m?.[1]) break
+      const missingCol =
+        msg.match(/column\s+\"([^\"]+)\"/i)?.[1] ??
+        msg.match(/Could not find the '([^']+)' column/i)?.[1] ??
+        msg.match(/Could not find the \"([^\"]+)\" column/i)?.[1]
 
-      const missingCol = m[1]
+      if (!missingCol) break
       if (missingCol in payload) {
         delete payload[missingCol]
         continue
