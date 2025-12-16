@@ -194,14 +194,14 @@ export default function JournalViewPage({ params }: { params: Promise<{ journalI
       {/* Top Navigation */}
       <header className="bg-primary text-primary-foreground">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="flex items-center justify-between h-14">
-            <div className="flex items-center gap-6">
+          <div className="flex flex-col gap-2 py-3 sm:flex-row sm:items-center sm:justify-between sm:h-14 sm:py-0">
+            <div className="flex flex-wrap items-center gap-x-6 gap-y-2">
               <Link href="/admin/hosted-journals" className="flex items-center gap-2 text-sm hover:text-gray-300">
                 <ArrowLeft className="w-4 h-4" />
                 Back to Journals
               </Link>
             </div>
-            <div className="flex items-center gap-4">
+            <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
               <Link
                 href={`/journal/${journalId}/settings`}
                 className="flex items-center gap-2 text-sm hover:text-gray-300"
@@ -263,7 +263,7 @@ export default function JournalViewPage({ params }: { params: Promise<{ journalI
             </div>
 
             {/* Quick Actions */}
-            <div className="flex flex-col gap-2 flex-shrink-0">
+            <div className="flex flex-col gap-2 flex-shrink-0 w-full md:w-auto">
               <Link href={`/journal/${journal.path}/settings`}>
                 <Button variant="outline" className="w-full justify-start bg-transparent">
                   <Settings className="w-4 h-4 mr-2" />
@@ -284,7 +284,7 @@ export default function JournalViewPage({ params }: { params: Promise<{ journalI
       {/* Stats Bar */}
       <div className="bg-white border-b">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="grid grid-cols-2 md:grid-cols-4 divide-x">
+          <div className="grid grid-cols-2 md:grid-cols-4 divide-x md:divide-x-0">
             {stats.map((stat) => (
               <div key={stat.label} className="py-4 px-4 text-center">
                 <div className="flex items-center justify-center gap-2 text-gray-500 mb-1">
@@ -301,7 +301,7 @@ export default function JournalViewPage({ params }: { params: Promise<{ journalI
       {/* Main Content */}
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
         <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-6">
-          <TabsList className="bg-white border">
+          <TabsList className="bg-white border w-full overflow-x-auto whitespace-nowrap justify-start">
             <TabsTrigger value="overview">Overview</TabsTrigger>
             <TabsTrigger value="issues">Issues ({publishedIssues.length})</TabsTrigger>
             <TabsTrigger value="articles">Articles ({publishedSubmissions.length})</TabsTrigger>

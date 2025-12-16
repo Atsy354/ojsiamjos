@@ -400,8 +400,8 @@ export default function BrowsePage() {
     <div className="min-h-screen bg-background">
       {/* IEEE-style Top Bar */}
       <div className="bg-primary text-primary-foreground">
-        <div className="mx-auto flex h-8 max-w-7xl items-center justify-between px-4 text-xs">
-          <div className="flex items-center gap-4">
+        <div className="mx-auto flex min-h-8 max-w-7xl flex-wrap items-center justify-between gap-x-4 gap-y-1 px-4 py-1 text-xs">
+          <div className="flex flex-wrap items-center gap-x-4 gap-y-1">
             <Link href={ROUTES.HOME} className="hover:underline">
               {APP_NAME}
             </Link>
@@ -414,7 +414,7 @@ export default function BrowsePage() {
               Archive
             </Link>
           </div>
-          <div className="flex items-center gap-4">
+          <div className="flex flex-wrap items-center gap-x-4 gap-y-1">
             <Link href={ROUTES.LOGIN} className="hover:underline">
               Sign In
             </Link>
@@ -428,7 +428,7 @@ export default function BrowsePage() {
       {/* Main Header */}
       <header className="bg-primary text-primary-foreground">
         <div className="mx-auto max-w-7xl px-4 py-4">
-          <div className="flex items-center justify-between">
+          <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
             <Link href={ROUTES.HOME} className="flex items-center gap-3">
               <div className="flex h-10 w-10 items-center justify-center rounded bg-background text-xl font-bold text-primary">
                 IJ
@@ -437,7 +437,7 @@ export default function BrowsePage() {
             </Link>
 
             {/* Search Bar */}
-            <div className="flex items-center gap-2">
+            <div className="flex w-full items-center gap-2 sm:w-auto">
               <div className="relative">
                 <Input
                   type="search"
@@ -447,7 +447,7 @@ export default function BrowsePage() {
                     setSearch(e.target.value)
                     setCurrentPage(1)
                   }}
-                  className="w-80 bg-white pl-10 text-gray-900"
+                  className="w-full bg-white pl-10 text-gray-900 sm:w-80"
                 />
                 <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400" />
               </div>
@@ -588,7 +588,7 @@ export default function BrowsePage() {
       {/* Results Bar */}
       <div className="border-b bg-gray-50">
         <div className="mx-auto max-w-7xl px-4 py-3">
-          <div className="flex items-center justify-between">
+          <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
             <p className="text-sm text-gray-600">
               Showing{" "}
               <span className="font-semibold">
@@ -597,11 +597,11 @@ export default function BrowsePage() {
               </span>{" "}
               of <span className="font-semibold">{filteredJournals.length}</span>
             </p>
-            <div className="flex items-center gap-4">
+            <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:gap-4">
               <div className="flex items-center gap-2">
                 <span className="text-sm text-gray-600">Sort By</span>
                 <Select value={sortBy} onValueChange={setSortBy}>
-                  <SelectTrigger className="w-48 h-8 text-sm">
+                  <SelectTrigger className="h-8 w-full text-sm sm:w-48">
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
@@ -620,7 +620,7 @@ export default function BrowsePage() {
                     setCurrentPage(1)
                   }}
                 >
-                  <SelectTrigger className="w-32 h-8 text-sm bg-accent text-accent-foreground border-accent">
+                  <SelectTrigger className="h-8 w-full text-sm bg-accent text-accent-foreground border-accent sm:w-32">
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
@@ -638,9 +638,9 @@ export default function BrowsePage() {
 
       {/* Main Content with Sidebar */}
       <div className="mx-auto max-w-7xl px-4 py-6">
-        <div className="flex gap-6">
+        <div className="flex flex-col gap-6 lg:flex-row">
           {/* Left Sidebar Filters */}
-          <aside className="w-64 flex-shrink-0">
+          <aside className="w-full flex-shrink-0 lg:w-64">
             <div className="rounded border bg-white">
               {/* Show Filter */}
               <div className="border-b p-4">

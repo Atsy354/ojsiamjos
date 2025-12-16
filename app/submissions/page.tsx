@@ -113,7 +113,7 @@ export default function SubmissionsPage() {
   return (
     <DashboardLayout title="Submissions" subtitle="Manage editorial workflow (OJS stages)">
       <Tabs defaultValue={defaultTab} className="space-y-4">
-        <TabsList>
+        <TabsList className="w-full overflow-x-auto whitespace-nowrap justify-start">
           <TabsTrigger value="all">All ({unassigned.length + inReview.length + copyediting.length + production.length + archives.length})</TabsTrigger>
           <TabsTrigger value="unassigned">Unassigned ({unassigned.length})</TabsTrigger>
           <TabsTrigger value="review">In Review ({inReview.length})</TabsTrigger>

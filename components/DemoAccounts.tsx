@@ -114,7 +114,7 @@ export default function DemoAccounts({ onSelectAccount }: DemoAccountsProps) {
             <div className="space-y-3">
                 {demoAccountGroups.map((group) => (
                     <div key={group.roleId} className="border border-border rounded-lg overflow-hidden bg-background">
-                        <div className={`w-full ${group.color} text-primary-foreground px-4 py-3 flex items-center justify-between`}>
+                        <div className={`w-full ${group.color} text-primary-foreground px-3 sm:px-4 py-3 flex items-center justify-between`}>
                             <div className="flex items-center gap-3">
                                 <div className="p-2 bg-white/10 rounded">{group.icon}</div>
                                 <div className="text-left">
@@ -124,7 +124,7 @@ export default function DemoAccounts({ onSelectAccount }: DemoAccountsProps) {
                             </div>
                         </div>
 
-                        <div className="p-4 bg-muted/30">
+                        <div className="p-3 sm:p-4 bg-muted/30">
                             <p className="text-sm text-muted-foreground mb-3">{group.description}</p>
                             <div className="grid gap-2 sm:grid-cols-2">
                                 {group.users.map((user) => (

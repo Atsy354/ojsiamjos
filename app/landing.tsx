@@ -54,7 +54,7 @@ export default async function LandingPage() {
           <div className="absolute -bottom-32 left-[-10%] h-72 w-72 sm:h-96 sm:w-96 rounded-full bg-primary/10 blur-3xl" />
         </div>
 
-        <div className="relative mx-auto max-w-7xl px-4 py-14 sm:px-6 sm:py-18 lg:px-8 lg:py-24">
+        <div className="relative mx-auto max-w-7xl px-4 py-14 sm:px-6 sm:py-16 lg:px-8 lg:py-24">
           <div className="grid gap-10 lg:grid-cols-2 lg:items-center">
             <div>
               <div className="inline-flex items-center gap-2 rounded-full border bg-card/60 px-3 py-1.5 text-xs text-muted-foreground">

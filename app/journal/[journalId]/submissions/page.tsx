@@ -77,7 +77,7 @@ export default function JournalSubmissionsPage() {
       subtitle={`Manage submissions for ${journal?.name || "this journal"}`}
     >
       <Tabs defaultValue="all" className="space-y-4">
-        <TabsList>
+        <TabsList className="w-full overflow-x-auto whitespace-nowrap justify-start">
           <TabsTrigger value="all">All ({submissions.length})</TabsTrigger>
           <TabsTrigger value="active">Active ({activeSubmissions.length})</TabsTrigger>
           <TabsTrigger value="completed">Completed ({completedSubmissions.length})</TabsTrigger>

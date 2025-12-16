@@ -92,10 +92,10 @@ export default function LoginPage() {
   }
 
   return (
-    <div className="min-h-screen bg-background flex">
+    <div className="min-h-screen bg-background flex flex-col lg:flex-row">
       {/* Left Panel */}
       <div className="w-full lg:w-[520px] bg-white shadow-xl">
-        <div className="p-8">
+        <div className="p-4 sm:p-6 lg:p-8">
           <div className="flex items-center justify-between">
             <Link
               href={ROUTES.HOME}
@@ -182,6 +182,26 @@ export default function LoginPage() {
                   {isLoading ? "Signing in..." : "Sign In"}
                 </Button>
               </form>
+            </Card>
+          </div>
+
+          <div className="mt-6 lg:hidden">
+            <Card className="p-6 shadow-lg border-0">
+              <div>
+                <h2 className="text-base font-semibold text-foreground">Demo Accounts</h2>
+                <p className="mt-1 text-sm text-muted-foreground">
+                  Untuk testing, klik akun demo untuk auto-fill. Password demo: <span className="font-mono">NEWPASSWORD</span>
+                </p>
+              </div>
+
+              <div className="mt-4 max-h-[420px] overflow-y-auto pr-2">
+                <DemoAccounts
+                  onSelectAccount={(e, p) => {
+                    setEmail(e)
+                    setPassword(p)
+                  }}
+                />
+              </div>
             </Card>
           </div>
         </div>

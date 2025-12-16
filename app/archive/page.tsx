@@ -123,7 +123,7 @@ export default function ArchivePage() {
                       </div>
                     </CardHeader>
                     <CardContent className="space-y-4">
-                      <div className="flex items-center gap-4 text-sm text-muted-foreground">
+                      <div className="flex flex-wrap items-center gap-x-4 gap-y-2 text-sm text-muted-foreground">
                         <span className="flex items-center gap-1">
                           <Calendar className="h-4 w-4" />
                           {issue.datePublished ? format(new Date(issue.datePublished), "MMM yyyy") : "Not published"}

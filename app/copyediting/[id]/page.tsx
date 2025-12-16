@@ -135,7 +135,7 @@ export default function CopyeditingPage() {
 
                 {/* Copyediting Workflow */}
                 <Tabs defaultValue="initial" onValueChange={setStage}>
-                    <TabsList className="grid w-full grid-cols-3">
+                    <TabsList className="w-full overflow-x-auto whitespace-nowrap justify-start">
                         <TabsTrigger value="initial">Initial Copyedit</TabsTrigger>
                         <TabsTrigger value="author_review">Author Review</TabsTrigger>
                         <TabsTrigger value="final">Final Copyedit</TabsTrigger>

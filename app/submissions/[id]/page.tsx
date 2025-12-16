@@ -444,8 +444,8 @@ export default function SubmissionDetailPage() {
     >
       <div className="space-y-6">
         {/* Header with back button and actions */}
-        <div className="flex items-center justify-between">
-          <Button variant="ghost" asChild>
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+          <Button variant="ghost" asChild className="justify-start">
             <Link href="/submissions">
               <ArrowLeft className="mr-2 h-4 w-4" />
               Back to Submissions
@@ -453,7 +453,7 @@ export default function SubmissionDetailPage() {
           </Button>
 
           {isEditor && (
-            <div className="flex items-center gap-2">
+            <div className="flex w-full flex-col gap-2 sm:w-auto sm:flex-row sm:items-center">
               {canSendToReview && (
                 <Button onClick={handleSendToReview} disabled={sendToReviewLoading}>
                   <Send className="mr-2 h-4 w-4" />
@@ -661,7 +661,7 @@ export default function SubmissionDetailPage() {
 
             {/* Tabs */}
             <Tabs defaultValue="files" className="space-y-4">
-              <TabsList className="grid w-full grid-cols-5">
+              <TabsList className="w-full overflow-x-auto whitespace-nowrap justify-start">
                 <TabsTrigger value="files">Files</TabsTrigger>
                 <TabsTrigger value="participants">Participants</TabsTrigger>
                 <TabsTrigger value="review">Review</TabsTrigger>
@@ -688,7 +688,7 @@ export default function SubmissionDetailPage() {
                       </div>
                     ) : (
                       <div className="space-y-4">
-                        <div className="flex items-center justify-between rounded-lg border p-3">
+                        <div className="flex flex-col gap-2 rounded-lg border p-3 sm:flex-row sm:items-center sm:justify-between">
                           <div>
                             <p className="text-sm font-medium">Show all versions</p>
                             <p className="text-xs text-muted-foreground">When off, only the latest file per stage and filename is shown</p>
@@ -827,15 +827,15 @@ export default function SubmissionDetailPage() {
                               ? 'Complete'
                               : getReviewAssignmentStatusLabel(Number(review?.status))
                             return (
-                              <div key={review?.id || `review-${idx}`} className="flex items-center justify-between rounded-lg border p-3">
-                                <div className="flex items-center gap-3">
+                              <div key={review?.id || `review-${idx}`} className="flex flex-col gap-2 rounded-lg border p-3 sm:flex-row sm:items-center sm:justify-between">
+                                <div className="flex items-center gap-3 min-w-0">
                                   <Avatar className="h-8 w-8">
                                     <AvatarFallback className="text-xs">
                                       {(String(displayName)[0] || 'R').toUpperCase()}
                                       {(String(displayName)[1] || 'E').toUpperCase()}
                                     </AvatarFallback>
                                   </Avatar>
-                                  <div>
+                                  <div className="min-w-0">
                                     <p className="text-sm font-medium">
                                       {displayName}
                                     </p>
@@ -844,7 +844,7 @@ export default function SubmissionDetailPage() {
                                     </p>
                                   </div>
                                 </div>
-                                <Badge variant="outline">
+                                <Badge variant="outline" className="w-fit">
                                   {statusLabel}
                                 </Badge>
                               </div>

@@ -206,7 +206,7 @@ export default function RegisterPage() {
       {/* Header */}
       <div className="border-b bg-white/80 backdrop-blur-sm">
         <div className="container mx-auto px-4 py-4">
-          <div className="flex items-center justify-between mb-8">
+          <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between mb-6 sm:mb-8">
             <Link href={ROUTES.HOME} className="flex items-center gap-2 text-muted-foreground hover:text-foreground">
               <ArrowLeft className="h-4 w-4" />
               <span>Back to Home</span>
@@ -218,10 +218,10 @@ export default function RegisterPage() {
         </div>
       </div>
 
-      <div className="container mx-auto px-4 py-8">
+      <div className="container mx-auto px-4 py-6 sm:py-8">
         <div className="max-w-2xl mx-auto">
           {/* Branding */}
-          <div className="text-center mb-8">
+          <div className="text-center mb-6 sm:mb-8">
             <div className="inline-flex items-center justify-center w-16 h-16 bg-primary rounded-2xl mb-4">
               <BookOpen className="h-8 w-8 text-white" />
             </div>
@@ -248,7 +248,7 @@ export default function RegisterPage() {
                 )}
 
                 {/* Account Information */}
-                <div className="rounded-lg border bg-white p-4 space-y-4">
+                <div className="rounded-lg border bg-white p-4 sm:p-5 space-y-4">
                   <h3 className="font-semibold text-foreground">Account Information</h3>
 
                   <div className="space-y-2">
@@ -301,10 +301,10 @@ export default function RegisterPage() {
                 </div>
 
                 {/* Profile Information */}
-                <div className="rounded-lg border bg-white p-4 space-y-4">
+                <div className="rounded-lg border bg-white p-4 sm:p-5 space-y-4">
                   <h3 className="font-semibold text-foreground">Profile Information</h3>
 
-                  <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                  <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4">
                     <div className="space-y-2">
                       <Label htmlFor="salutation">Salutation</Label>
                       <Select value={formData.salutation} onValueChange={(v) => handleSelectChange("salutation", v)}>
@@ -414,7 +414,7 @@ export default function RegisterPage() {
                 </div>
 
                 {/* Contact Information */}
-                <div className="rounded-lg border bg-white p-4 space-y-4">
+                <div className="rounded-lg border bg-white p-4 sm:p-5 space-y-4">
                   <h3 className="font-semibold text-foreground">Contact Information</h3>
 
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-4">

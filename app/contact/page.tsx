@@ -338,7 +338,7 @@ export default function ContactPage() {
                   <div className="mb-6 p-4 rounded-lg bg-red-500/10 border border-red-500/20">
                     <p className="text-sm text-red-600">{error}</p>
                     {errorSql && (
-                      <pre className="mt-3 max-h-56 overflow-auto rounded bg-background p-3 text-xs text-foreground">
+                      <pre className="mt-3 max-h-56 overflow-auto rounded bg-background p-3 text-xs text-foreground whitespace-pre overflow-x-auto">
                         {errorSql}
                       </pre>
                     )}

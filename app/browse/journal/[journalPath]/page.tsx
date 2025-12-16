@@ -98,8 +98,8 @@ export default function JournalDetailPage() {
       {/* Header */}
       <header className="bg-primary text-primary-foreground">
         <div className="border-b border-primary/60">
-          <div className="mx-auto flex h-8 max-w-7xl items-center justify-between px-4 text-xs">
-            <div className="flex items-center gap-4">
+          <div className="mx-auto flex min-h-8 max-w-7xl flex-wrap items-center justify-between gap-x-4 gap-y-1 px-4 py-1 text-xs">
+            <div className="flex flex-wrap items-center gap-x-4 gap-y-1">
               <Link href="/" className="hover:underline">
                 Home
               </Link>
@@ -108,7 +108,7 @@ export default function JournalDetailPage() {
                 Browse
               </Link>
             </div>
-            <div className="flex items-center gap-4">
+            <div className="flex flex-wrap items-center gap-x-4 gap-y-1">
               <Link href={ROUTES.LOGIN} className="hover:underline">
                 Sign In
               </Link>
@@ -119,12 +119,12 @@ export default function JournalDetailPage() {
           </div>
         </div>
         <div className="mx-auto max-w-7xl px-4 py-4">
-          <div className="flex items-center justify-between">
+          <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
             <Link href="/" className="flex items-center gap-2">
               <BookOpen className="h-8 w-8" />
               <span className="text-xl font-bold">IAMJOS</span>
             </Link>
-            <div className="flex items-center gap-2">
+            <div className="flex w-full items-center gap-2 sm:w-auto">
               <Button asChild variant="outline" size="sm" className="border-white text-white hover:bg-white hover:text-primary bg-transparent">
                 <Link href={ROUTES.LOGIN}>Sign In</Link>
               </Button>
@@ -135,8 +135,8 @@ export default function JournalDetailPage() {
           </div>
         </div>
         <div className="bg-primary/90 py-3">
-          <div className="mx-auto flex max-w-7xl items-center gap-2 px-4">
-            <Input placeholder="Search in this journal..." className="h-10 flex-1 bg-white" />
+          <div className="mx-auto flex max-w-7xl flex-col gap-2 px-4 sm:flex-row sm:items-center">
+            <Input placeholder="Search in this journal..." className="h-10 w-full bg-white sm:flex-1" />
             <Button className="h-10 bg-accent text-accent-foreground hover:bg-accent/90">
               <Search className="h-4 w-4" />
             </Button>
@@ -146,7 +146,7 @@ export default function JournalDetailPage() {
 
       {/* Breadcrumb */}
       <div className="border-b bg-white">
-        <div className="mx-auto flex max-w-7xl items-center gap-2 px-4 py-2 text-sm">
+        <div className="mx-auto flex max-w-7xl flex-wrap items-center gap-2 px-4 py-2 text-sm">
           <Link href="/" className="text-primary hover:underline">
             <Home className="h-4 w-4" />
           </Link>
@@ -162,7 +162,7 @@ export default function JournalDetailPage() {
       {/* Journal Header Banner */}
       <div className="bg-white border-b">
         <div className="mx-auto max-w-7xl px-4 py-8">
-          <div className="flex gap-6">
+          <div className="flex flex-col gap-6 sm:flex-row">
             {/* Journal Cover */}
             <div className="hidden h-40 w-32 flex-shrink-0 items-center justify-center rounded bg-primary sm:flex">
               <BookOpen className="h-16 w-16 text-white" />
@@ -199,7 +199,7 @@ export default function JournalDetailPage() {
       {/* Tabs */}
       <div className="border-b bg-white">
         <div className="mx-auto max-w-7xl px-4">
-          <nav className="flex gap-6">
+          <nav className="flex gap-6 overflow-x-auto whitespace-nowrap">
             {[
               { id: "about", label: "About" },
               { id: "issues", label: "All Issues" },

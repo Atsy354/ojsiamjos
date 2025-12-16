@@ -43,7 +43,7 @@ export function SubmissionList({ submissions, onDelete, showCreateButton = true 
     <div className="space-y-4">
       {/* Toolbar */}
       <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-        <div className="flex flex-1 items-center gap-3">
+        <div className="flex flex-1 flex-col gap-3 sm:flex-row sm:items-center">
           <div className="relative flex-1 sm:max-w-sm">
             <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
             <Input
@@ -54,7 +54,7 @@ export function SubmissionList({ submissions, onDelete, showCreateButton = true 
             />
           </div>
           <Select value={statusFilter} onValueChange={setStatusFilter}>
-            <SelectTrigger className="w-[160px]">
+            <SelectTrigger className="w-full sm:w-[160px]">
               <Filter className="mr-2 h-4 w-4" />
               <SelectValue placeholder="Filter status" />
             </SelectTrigger>
@@ -70,7 +70,7 @@ export function SubmissionList({ submissions, onDelete, showCreateButton = true 
           </Select>
         </div>
 
-        <div className="flex items-center gap-2">
+        <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
           <div className="flex items-center rounded-lg border p-1">
             <Button
               variant={viewMode === "grid" ? "secondary" : "ghost"}
@@ -90,7 +90,7 @@ export function SubmissionList({ submissions, onDelete, showCreateButton = true 
             </Button>
           </div>
           {showCreateButton && (
-            <Button asChild>
+            <Button asChild className="w-full sm:w-auto">
               <Link href={newSubmissionHref}>
                 <Plus className="mr-2 h-4 w-4" />
                 New Submission

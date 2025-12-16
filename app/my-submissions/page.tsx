@@ -127,19 +127,19 @@ function MySubmissionsContent() {
   return (
     <DashboardLayout title="My Submissions" subtitle="Manage your manuscripts (OJS PKP 3.3)">
       {/* OJS PKP 3.3-like header toolbar */}
-      <div className="mb-4 flex items-center justify-between">
+      <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <div>
           <h2 className="text-lg font-semibold">My Submissions</h2>
           <p className="text-sm text-muted-foreground">View and manage your submissions</p>
         </div>
-        <Button asChild>
+        <Button asChild className="w-full sm:w-auto">
           <Link href={newSubmissionHref}>New Submission</Link>
         </Button>
       </div>
 
       {/* OJS PKP 3.3: Tabs untuk Active, Incomplete, Complete */}
       <Tabs value={activeTab} onValueChange={handleTabChange} className="space-y-4">
-        <TabsList>
+        <TabsList className="w-full overflow-x-auto whitespace-nowrap justify-start">
           <TabsTrigger value="active">
             Active ({activeSubmissions.length})
           </TabsTrigger>

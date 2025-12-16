@@ -176,8 +176,8 @@ export default function ArticleDetailPage() {
       {/* IEEE-style Header */}
       <header className="bg-primary text-primary-foreground">
         <div className="border-b border-primary/60">
-          <div className="mx-auto flex h-8 max-w-7xl items-center justify-between px-4 text-xs">
-            <div className="flex items-center gap-4">
+          <div className="mx-auto flex min-h-8 max-w-7xl flex-wrap items-center justify-between gap-x-4 gap-y-1 px-4 py-1 text-xs">
+            <div className="flex flex-wrap items-center gap-x-4 gap-y-1">
               <Link href={ROUTES.HOME} className="hover:underline">
                 Home
               </Link>
@@ -190,7 +190,7 @@ export default function ArticleDetailPage() {
                 Archive
               </Link>
             </div>
-            <div className="flex items-center gap-4">
+            <div className="flex flex-wrap items-center gap-x-4 gap-y-1">
               <Link href={ROUTES.LOGIN} className="hover:underline">
                 Sign In
               </Link>
@@ -198,13 +198,13 @@ export default function ArticleDetailPage() {
           </div>
         </div>
         <div className="mx-auto max-w-7xl px-4 py-4">
-          <div className="flex items-center justify-between">
+          <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
             <Link href="/" className="flex items-center gap-2">
               <BookOpen className="h-8 w-8" />
               <span className="text-xl font-bold">IAMJOS</span>
             </Link>
-            <div className="flex flex-1 justify-center px-8">
-              <div className="relative w-full max-w-xl">
+            <div className="w-full sm:flex-1 sm:px-8">
+              <div className="relative w-full sm:max-w-xl sm:mx-auto">
                 <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400" />
                 <Input
                   placeholder="Search articles..."
@@ -212,7 +212,7 @@ export default function ArticleDetailPage() {
                 />
               </div>
             </div>
-            <nav className="flex items-center gap-4">
+            <nav className="flex w-full flex-wrap items-center gap-2 sm:w-auto sm:gap-4">
               <Link href={ROUTES.LOGIN} className="hover:underline">
                 Sign In
               </Link>
@@ -231,7 +231,7 @@ export default function ArticleDetailPage() {
 
       <main className="mx-auto max-w-7xl px-4 py-6">
         {/* Breadcrumb */}
-        <nav className="mb-4 flex items-center gap-2 text-sm text-gray-500">
+        <nav className="mb-4 flex flex-wrap items-center gap-2 text-sm text-gray-500">
           <Link href={ROUTES.HOME} className="hover:text-primary">
             <Home className="h-4 w-4" />
           </Link>
