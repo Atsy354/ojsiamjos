@@ -164,13 +164,28 @@ export async function POST(request: NextRequest) {
     let dbError: any = null
 
     const attemptInsert = async (payload: Record<string, any>) => {
-      return await admin.from("users").insert(payload).select().single()
+      return await admin.from("users").upsert(payload, { onConflict: "id" }).select().single()
     }
 
     let payload = { ...baseInsert }
     for (let i = 0; i < 12; i++) {
       ;({ data: user, error: dbError } = await attemptInsert(payload))
       if (!dbError) break
+
+      // If the row already exists (e.g. partial previous attempt), fetch it and continue.
+      if ((dbError as any)?.code === "23505" && authData.user?.id) {
+        const { data: existingById, error: existingByIdError } = await admin
+          .from("users")
+          .select("*")
+          .eq("id", authData.user.id)
+          .single()
+
+        if (!existingByIdError && existingById) {
+          user = existingById
+          dbError = null
+          break
+        }
+      }
 
       const msg = typeof dbError?.message === "string" ? dbError.message : ""
       const missingCol =
