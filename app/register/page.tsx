@@ -35,6 +35,7 @@ export default function RegisterPage() {
   const [isLoading, setIsLoading] = useState(false)
   const [error, setError] = useState("")
   const [success, setSuccess] = useState(false)
+  const [successMessage, setSuccessMessage] = useState<string | null>(null)
   const [formData, setFormData] = useState({
     username: "",
     salutation: "",
@@ -113,7 +114,7 @@ export default function RegisterPage() {
       if (formData.registerAsAuthor) roles.push("author")
       if (formData.registerAsReviewer) roles.push("reviewer")
 
-      await apiPost("/api/auth/register", {
+      const registerResp = await apiPost("/api/auth/register", {
         username: formData.username,
         salutation: formData.salutation || undefined,
         email: formData.email,
@@ -134,11 +135,24 @@ export default function RegisterPage() {
         journalId: formData.journalId || undefined,
       })
 
+      const requiresEmailConfirmation = (registerResp as any)?.requiresEmailConfirmation === true
+      const serverMessage = typeof (registerResp as any)?.message === "string" ? (registerResp as any).message : null
+
+      if (requiresEmailConfirmation) {
+        setSuccessMessage(serverMessage ?? "Registration successful. Please check your email to confirm your account before signing in.")
+        setSuccess(true)
+        setTimeout(() => {
+          router.push(ROUTES.LOGIN)
+        }, 2500)
+        return
+      }
+
       const loginResp = await apiPost("/api/auth/login", {
         email: formData.email,
         password: formData.password,
       })
 
+      setSuccessMessage(serverMessage ?? "Your account has been created. Redirecting to your dashboard...")
       setSuccess(true)
 
       // Auto login after registration
@@ -174,7 +188,7 @@ export default function RegisterPage() {
             <CheckCircle2 className="h-12 w-12 text-primary mx-auto mb-4" />
             <h2 className="text-2xl font-bold mb-2">Registration Successful!</h2>
             <p className="text-muted-foreground mb-4">
-              Your account has been created. Redirecting to your dashboard...
+              {successMessage ?? "Your account has been created."}
             </p>
             <div className="flex items-center justify-center gap-2">
               <div className="w-2 h-2 bg-primary rounded-full animate-bounce" style={{ animationDelay: "0ms" }} />

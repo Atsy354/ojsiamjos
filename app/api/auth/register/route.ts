@@ -4,6 +4,7 @@ import bcrypt from "bcryptjs"
 
 export async function POST(request: NextRequest) {
   try {
+    const origin = request.headers.get("origin") ?? ""
     const {
       email,
       password,
@@ -82,6 +83,9 @@ export async function POST(request: NextRequest) {
     const { data: authData, error: authError } = await supabase.auth.signUp({
       email,
       password,
+      options: {
+        emailRedirectTo: origin ? `${origin}${origin.endsWith("/") ? "" : ""}login` : undefined,
+      },
     })
 
     if (authError) {
@@ -226,6 +230,10 @@ export async function POST(request: NextRequest) {
         journalId: user.journal_id ?? null,
       },
       session: authData.session,
+      requiresEmailConfirmation: !authData.session,
+      message: !authData.session
+        ? "Registration successful. Please check your email to confirm your account before signing in."
+        : "Registration successful.",
     }, { status: 201 })
   } catch (error) {
     console.error("Register error:", error)
