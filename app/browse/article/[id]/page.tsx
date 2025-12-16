@@ -7,7 +7,6 @@ import { apiGet } from "@/lib/api/client"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { Separator } from "@/components/ui/separator"
-import { Progress } from "@/components/ui/progress"
 import {
   BookOpen,
   ChevronRight,
@@ -22,7 +21,6 @@ import {
   Quote,
   Eye,
   Unlock,
-  ExternalLink,
   TrendingUp,
   Globe,
   Twitter,
@@ -34,7 +32,6 @@ import {
 } from "lucide-react"
 import { Input } from "@/components/ui/input"
 import type { Submission, Journal } from "@/lib/types"
-import { getArticleContent } from "@/lib/services/seed-data"
 import { ROUTES } from "@/lib/constants"
 
 export default function ArticleDetailPage() {
@@ -49,21 +46,9 @@ export default function ArticleDetailPage() {
   const [issnExpanded, setIssnExpanded] = useState(false)
   const [copied, setCopied] = useState(false)
 
-  const [articleContent, setArticleContent] = useState<ReturnType<typeof getArticleContent>>(null)
-
-  const getMetrics = () => {
-    if (!article?.dateSubmitted) {
-      return { views: 1234, downloads: 456, citations: 12, altmetricScore: 28, socialShares: 89 }
-    }
-    const daysOld = Math.floor((Date.now() - new Date(article.dateSubmitted).getTime()) / (1000 * 60 * 60 * 24))
-    const baseViews = Math.max(500, daysOld * 150 + Math.floor(Math.random() * 1000))
-    return {
-      views: baseViews,
-      downloads: Math.floor(baseViews * 0.35),
-      citations: Math.max(0, Math.floor(daysOld / 30) + Math.floor(Math.random() * 5)),
-      altmetricScore: Math.floor(Math.random() * 50) + 10,
-      socialShares: Math.floor(baseViews * 0.08),
-    }
+  const formatMetric = (value: number | null | undefined) => {
+    if (typeof value !== "number" || !Number.isFinite(value)) return "N/A"
+    return value.toLocaleString()
   }
 
   useEffect(() => {
@@ -79,7 +64,6 @@ export default function ArticleDetailPage() {
             dateSubmitted: sub.date_submitted,
             journalId: sub.journal_id,
           } as any)
-          setArticleContent(getArticleContent(sub.keywords || []))
 
           // Load journal
           if (sub.journal_id) {
@@ -133,9 +117,9 @@ export default function ArticleDetailPage() {
 
   if (!mounted) {
     return (
-      <div className="min-h-screen bg-[#f8f8f8]">
+      <div className="min-h-screen bg-background">
         <div className="flex items-center justify-center py-12">
-          <div className="h-8 w-8 animate-spin rounded-full border-4 border-[#006b7b] border-t-transparent" />
+          <div className="h-8 w-8 animate-spin rounded-full border-4 border-primary border-t-transparent" />
         </div>
       </div>
     )
@@ -143,8 +127,8 @@ export default function ArticleDetailPage() {
 
   if (!article) {
     return (
-      <div className="min-h-screen bg-[#f8f8f8]">
-        <header className="bg-[#006b7b] py-4 text-white">
+      <div className="min-h-screen bg-background">
+        <header className="bg-primary py-4 text-primary-foreground">
           <div className="mx-auto max-w-7xl px-4">
             <Link href="/" className="flex items-center gap-2">
               <BookOpen className="h-8 w-8" />
@@ -164,7 +148,19 @@ export default function ArticleDetailPage() {
     )
   }
 
-  const metrics = getMetrics()
+  const metrics: {
+    views: number | null
+    downloads: number | null
+    citations: number | null
+    altmetricScore: number | null
+    socialShares: number | null
+  } = {
+    views: (article as any)?.views ?? null,
+    downloads: (article as any)?.downloads ?? null,
+    citations: (article as any)?.citations ?? null,
+    altmetricScore: (article as any)?.altmetricScore ?? null,
+    socialShares: (article as any)?.socialShares ?? null,
+  }
   const doi = `10.1109/IAMJOS.${new Date().getFullYear()}.${article.id.slice(-7)}`
 
   const scrollToSection = (sectionId: string) => {
@@ -176,10 +172,10 @@ export default function ArticleDetailPage() {
   }
 
   return (
-    <div className="min-h-screen bg-[#f8f8f8]">
+    <div className="min-h-screen bg-background">
       {/* IEEE-style Header */}
-      <header className="bg-[#006b7b] text-white">
-        <div className="border-b border-[#005a68]">
+      <header className="bg-primary text-primary-foreground">
+        <div className="border-b border-primary/60">
           <div className="mx-auto flex h-8 max-w-7xl items-center justify-between px-4 text-xs">
             <div className="flex items-center gap-4">
               <Link href={ROUTES.HOME} className="hover:underline">
@@ -217,12 +213,16 @@ export default function ArticleDetailPage() {
               </div>
             </div>
             <nav className="flex items-center gap-4">
+              <Link href={ROUTES.LOGIN} className="hover:underline">
+                Sign In
+              </Link>
               <Button
+                asChild
                 variant="outline"
                 size="sm"
-                className="border-white bg-transparent text-white hover:bg-white hover:text-[#006b7b]"
+                className="border-white bg-transparent text-white hover:bg-white hover:text-primary"
               >
-                Institutional Sign In
+                <Link href={ROUTES.LOGIN}>Sign In</Link>
               </Button>
             </nav>
           </div>
@@ -232,15 +232,15 @@ export default function ArticleDetailPage() {
       <main className="mx-auto max-w-7xl px-4 py-6">
         {/* Breadcrumb */}
         <nav className="mb-4 flex items-center gap-2 text-sm text-gray-500">
-          <Link href={ROUTES.HOME} className="hover:text-[#006b7b]">
+          <Link href={ROUTES.HOME} className="hover:text-primary">
             <Home className="h-4 w-4" />
           </Link>
           <ChevronRight className="h-4 w-4" />
-          <Link href={ROUTES.BROWSE} className="hover:text-[#006b7b]">
+          <Link href={ROUTES.BROWSE} className="hover:text-primary">
             Browse
           </Link>
           <ChevronRight className="h-4 w-4" />
-          <Link href={ROUTES.browseJournal(journal?.path || "")} className="hover:text-[#006b7b]">
+          <Link href={ROUTES.browseJournal(journal?.path || "")} className="hover:text-primary">
             {journal?.acronym || "Journal"}
           </Link>
           <ChevronRight className="h-4 w-4" />
@@ -250,7 +250,7 @@ export default function ArticleDetailPage() {
         {/* Article Header */}
         <div className="mb-6 rounded-lg bg-white p-6 shadow-sm">
           <div className="mb-4 flex flex-wrap items-center gap-3">
-            <Badge className="bg-emerald-600 text-white hover:bg-emerald-700">
+            <Badge className="bg-primary text-primary-foreground hover:bg-primary/90">
               {article.status === "published" ? "Published" : article.status}
             </Badge>
             <span className="text-sm text-gray-500">DOI: {doi}</span>
@@ -266,10 +266,10 @@ export default function ArticleDetailPage() {
                   <Link
                     href="#authors"
                     onClick={() => scrollToSection("authors")}
-                    className="text-[#006b7b] hover:underline"
+                    className="text-primary hover:underline"
                   >
                     {author.firstName} {author.lastName}
-                    {author.orcid && <sup className="ml-0.5 text-xs text-green-600">ORCID</sup>}
+                    {author.orcid && <sup className="ml-0.5 text-xs text-primary">ORCID</sup>}
                   </Link>
                   {author.affiliation && <sup className="ml-0.5 text-xs text-gray-500">{idx + 1}</sup>}
                   {idx < article.authors.length - 1 && ", "}
@@ -311,27 +311,27 @@ export default function ArticleDetailPage() {
 
           {/* View count badge */}
           <div className="mb-4">
-            <Badge variant="outline" className="gap-1 border-[#006b7b] text-[#006b7b]">
+            <Badge variant="outline" className="gap-1 border-primary text-primary">
               <Eye className="h-4 w-4" />
-              {metrics.views.toLocaleString()} Full Text Views
+              {formatMetric(metrics.views)} Full Text Views
             </Badge>
           </div>
 
           {/* Social/action icons */}
           <div className="mb-4 flex items-center gap-3">
-            <Button variant="ghost" size="icon" className="h-8 w-8 text-[#006b7b]" title="Save to library">
+            <Button variant="ghost" size="icon" className="h-8 w-8 text-primary" title="Save to library">
               <BookOpen className="h-5 w-5" />
             </Button>
-            <Button variant="ghost" size="icon" className="h-8 w-8 text-[#006b7b]" title="Share">
+            <Button variant="ghost" size="icon" className="h-8 w-8 text-primary" title="Share">
               <Share2 className="h-5 w-5" />
             </Button>
-            <Button variant="ghost" size="icon" className="h-8 w-8 text-[#006b7b]" title="Rights & Permissions">
+            <Button variant="ghost" size="icon" className="h-8 w-8 text-primary" title="Rights & Permissions">
               <Copyright className="h-5 w-5" />
             </Button>
-            <Button variant="ghost" size="icon" className="h-8 w-8 text-[#006b7b]" title="Add to collection">
+            <Button variant="ghost" size="icon" className="h-8 w-8 text-primary" title="Add to collection">
               <FolderPlus className="h-5 w-5" />
             </Button>
-            <Button variant="ghost" size="icon" className="h-8 w-8 text-[#006b7b]" title="Set alert">
+            <Button variant="ghost" size="icon" className="h-8 w-8 text-primary" title="Set alert">
               <Bell className="h-5 w-5" />
             </Button>
           </div>
@@ -342,7 +342,7 @@ export default function ArticleDetailPage() {
             <span className="font-medium text-orange-600">Open Access</span>
             <span className="text-sm text-gray-500">
               Under a{" "}
-              <Link href="https://creativecommons.org/licenses/by/4.0/" className="text-[#006b7b] hover:underline">
+              <Link href="https://creativecommons.org/licenses/by/4.0/" className="text-primary hover:underline">
                 Creative Commons License
               </Link>
             </span>
@@ -370,7 +370,7 @@ export default function ArticleDetailPage() {
                     onClick={() => scrollToSection(section.id)}
                     className={`block w-full rounded px-3 py-2 text-left text-sm transition-colors ${
                       activeSection === section.id
-                        ? "border-l-4 border-[#006b7b] bg-gray-50 font-medium text-[#006b7b]"
+                        ? "border-l-4 border-primary bg-gray-50 font-medium text-primary"
                         : "text-gray-600 hover:bg-gray-50"
                     }`}
                   >
@@ -420,13 +420,13 @@ export default function ArticleDetailPage() {
               <div className="mt-6 grid gap-3 rounded-lg bg-gray-50 p-4 text-sm sm:grid-cols-2">
                 <div>
                   <span className="font-semibold text-gray-900">Published in: </span>
-                  <Link href={ROUTES.browseJournal(journal?.path || "")} className="text-[#006b7b] hover:underline">
+                  <Link href={ROUTES.browseJournal(journal?.path || "")} className="text-primary hover:underline">
                     {journal?.name || "IAMJOS Journal"}
                   </Link>
                 </div>
                 <div>
                   <span className="font-semibold text-gray-900">DOI: </span>
-                  <Link href={`https://doi.org/${doi}`} className="text-[#006b7b] hover:underline">
+                  <Link href={`https://doi.org/${doi}`} className="text-primary hover:underline">
                     {doi}
                   </Link>
                 </div>
@@ -460,32 +460,7 @@ export default function ArticleDetailPage() {
             {/* Document Sections */}
             <section id="sections" className="scroll-mt-4 rounded-lg bg-white p-6 shadow-sm">
               <h2 className="mb-4 text-xl font-bold text-gray-900">Document Sections</h2>
-              {articleContent?.sections ? (
-                <div className="space-y-6">
-                  {articleContent.sections.map((section, idx) => (
-                    <div key={idx} className="border-b border-gray-100 pb-6 last:border-0 last:pb-0">
-                      <h3 className="mb-3 text-lg font-semibold text-gray-900">{section.title}</h3>
-                      <p className="leading-relaxed text-gray-700">{section.content}</p>
-                    </div>
-                  ))}
-                </div>
-              ) : (
-                <p className="text-gray-500 italic">Full document sections available in PDF version.</p>
-              )}
-
-              {/* Acknowledgments & Funding */}
-              {articleContent?.acknowledgments && (
-                <div className="mt-6 rounded-lg bg-blue-50 p-4">
-                  <h4 className="mb-2 font-semibold text-gray-900">Acknowledgments</h4>
-                  <p className="text-sm text-gray-700">{articleContent.acknowledgments}</p>
-                </div>
-              )}
-              {articleContent?.funding && (
-                <div className="mt-4 rounded-lg bg-green-50 p-4">
-                  <h4 className="mb-2 font-semibold text-gray-900">Funding</h4>
-                  <p className="text-sm text-gray-700">{articleContent.funding}</p>
-                </div>
-              )}
+              <p className="text-gray-500 italic">Not available.</p>
             </section>
 
             {/* Authors Section */}
@@ -494,7 +469,7 @@ export default function ArticleDetailPage() {
               <div className="space-y-4">
                 {article.authors.map((author, idx) => (
                   <div key={author.id} className="flex items-start gap-4 rounded-lg border border-gray-100 p-4">
-                    <div className="flex h-12 w-12 items-center justify-center rounded-full bg-[#006b7b] text-lg font-semibold text-white">
+                    <div className="flex h-12 w-12 items-center justify-center rounded-full bg-primary text-lg font-semibold text-primary-foreground">
                       {author.firstName[0]}
                       {author.lastName[0]}
                     </div>
@@ -511,7 +486,7 @@ export default function ArticleDetailPage() {
                         {author.orcid && (
                           <Link
                             href={`https://orcid.org/${author.orcid}`}
-                            className="inline-flex items-center gap-1 text-xs text-green-600 hover:underline"
+                            className="inline-flex items-center gap-1 text-xs text-primary hover:underline"
                             target="_blank"
                           >
                             <img
@@ -539,31 +514,7 @@ export default function ArticleDetailPage() {
             {/* References Section */}
             <section id="references" className="scroll-mt-4 rounded-lg bg-white p-6 shadow-sm">
               <h2 className="mb-4 text-xl font-bold text-gray-900">References</h2>
-              {articleContent?.references && articleContent.references.length > 0 ? (
-                <ol className="space-y-3 list-decimal list-inside">
-                  {articleContent.references.map((ref, idx) => (
-                    <li key={idx} className="text-sm text-gray-700 leading-relaxed pl-2">
-                      <span className="font-medium">{ref.authors}</span> "{ref.title}"{" "}
-                      <span className="italic">{ref.journal}</span>
-                      {ref.volume && `, vol. ${ref.volume}`}
-                      {ref.pages && `, pp. ${ref.pages}`}
-                      {`, ${ref.year}`}.
-                      {ref.doi && (
-                        <Link
-                          href={`https://doi.org/${ref.doi}`}
-                          className="ml-2 inline-flex items-center gap-1 text-[#006b7b] hover:underline"
-                          target="_blank"
-                        >
-                          <ExternalLink className="h-3 w-3" />
-                          DOI
-                        </Link>
-                      )}
-                    </li>
-                  ))}
-                </ol>
-              ) : (
-                <p className="text-gray-500 italic">References available in the full PDF document.</p>
-              )}
+              <p className="text-gray-500 italic">Not available.</p>
             </section>
 
             {/* Keywords Section */}
@@ -574,7 +525,7 @@ export default function ArticleDetailPage() {
                   <Link
                     key={keyword}
                     href={`/browse?search=${encodeURIComponent(keyword)}`}
-                    className="rounded-full bg-gray-100 px-4 py-2 text-sm font-medium text-[#006b7b] transition-colors hover:bg-[#006b7b] hover:text-white"
+                    className="rounded-full bg-gray-100 px-4 py-2 text-sm font-medium text-primary transition-colors hover:bg-primary hover:text-primary-foreground"
                   >
                     {keyword}
                   </Link>
@@ -585,7 +536,7 @@ export default function ArticleDetailPage() {
               <div className="mt-4">
                 <h4 className="mb-2 text-sm font-semibold text-gray-700">IEEE Keywords</h4>
                 <div className="flex flex-wrap gap-2">
-                  {["Research Article", "Open Access", "Peer Reviewed"].map((tag) => (
+                  {article.ieeeKeywords.map((tag) => (
                     <span key={tag} className="rounded bg-blue-50 px-3 py-1 text-xs text-blue-700">
                       {tag}
                     </span>
@@ -601,12 +552,12 @@ export default function ArticleDetailPage() {
               <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
                 {/* Views */}
                 <div className="rounded-lg border border-gray-200 p-4">
-                  <div className="flex items-center gap-3">
-                    <div className="flex h-10 w-10 items-center justify-center rounded-full bg-blue-100">
+                  <div className="flex items-center gap-4">
+                    <div className="rounded-lg bg-blue-100 p-3">
                       <Eye className="h-5 w-5 text-blue-600" />
                     </div>
                     <div>
-                      <p className="text-2xl font-bold text-gray-900">{metrics.views.toLocaleString()}</p>
+                      <p className="text-2xl font-bold text-gray-900">{formatMetric(metrics.views)}</p>
                       <p className="text-sm text-gray-500">Total Views</p>
                     </div>
                   </div>
@@ -614,12 +565,12 @@ export default function ArticleDetailPage() {
 
                 {/* Downloads */}
                 <div className="rounded-lg border border-gray-200 p-4">
-                  <div className="flex items-center gap-3">
-                    <div className="flex h-10 w-10 items-center justify-center rounded-full bg-green-100">
+                  <div className="flex items-center gap-4">
+                    <div className="rounded-lg bg-green-100 p-3">
                       <Download className="h-5 w-5 text-green-600" />
                     </div>
                     <div>
-                      <p className="text-2xl font-bold text-gray-900">{metrics.downloads.toLocaleString()}</p>
+                      <p className="text-2xl font-bold text-gray-900">{formatMetric(metrics.downloads)}</p>
                       <p className="text-sm text-gray-500">Downloads</p>
                     </div>
                   </div>
@@ -627,12 +578,12 @@ export default function ArticleDetailPage() {
 
                 {/* Citations */}
                 <div className="rounded-lg border border-gray-200 p-4">
-                  <div className="flex items-center gap-3">
-                    <div className="flex h-10 w-10 items-center justify-center rounded-full bg-purple-100">
+                  <div className="flex items-center gap-4">
+                    <div className="rounded-lg bg-purple-100 p-3">
                       <Quote className="h-5 w-5 text-purple-600" />
                     </div>
                     <div>
-                      <p className="text-2xl font-bold text-gray-900">{metrics.citations}</p>
+                      <p className="text-2xl font-bold text-gray-900">{formatMetric(metrics.citations)}</p>
                       <p className="text-sm text-gray-500">Citations</p>
                     </div>
                   </div>
@@ -640,12 +591,12 @@ export default function ArticleDetailPage() {
 
                 {/* Altmetric */}
                 <div className="rounded-lg border border-gray-200 p-4">
-                  <div className="flex items-center gap-3">
-                    <div className="flex h-10 w-10 items-center justify-center rounded-full bg-orange-100">
+                  <div className="flex items-center gap-4">
+                    <div className="rounded-lg bg-orange-100 p-3">
                       <TrendingUp className="h-5 w-5 text-orange-600" />
                     </div>
                     <div>
-                      <p className="text-2xl font-bold text-gray-900">{metrics.altmetricScore}</p>
+                      <p className="text-2xl font-bold text-gray-900">{formatMetric(metrics.altmetricScore)}</p>
                       <p className="text-sm text-gray-500">Altmetric Score</p>
                     </div>
                   </div>
@@ -653,12 +604,12 @@ export default function ArticleDetailPage() {
 
                 {/* Social Shares */}
                 <div className="rounded-lg border border-gray-200 p-4">
-                  <div className="flex items-center gap-3">
-                    <div className="flex h-10 w-10 items-center justify-center rounded-full bg-pink-100">
+                  <div className="flex items-center gap-4">
+                    <div className="rounded-lg bg-pink-100 p-3">
                       <Share2 className="h-5 w-5 text-pink-600" />
                     </div>
                     <div>
-                      <p className="text-2xl font-bold text-gray-900">{metrics.socialShares}</p>
+                      <p className="text-2xl font-bold text-gray-900">{formatMetric(metrics.socialShares)}</p>
                       <p className="text-sm text-gray-500">Social Shares</p>
                     </div>
                   </div>
@@ -667,11 +618,11 @@ export default function ArticleDetailPage() {
                 {/* Global Reach */}
                 <div className="rounded-lg border border-gray-200 p-4">
                   <div className="flex items-center gap-3">
-                    <div className="flex h-10 w-10 items-center justify-center rounded-full bg-teal-100">
+                    <div className="rounded-lg bg-teal-100 p-3">
                       <Globe className="h-5 w-5 text-teal-600" />
                     </div>
                     <div>
-                      <p className="text-2xl font-bold text-gray-900">42</p>
+                      <p className="text-2xl font-bold text-gray-900">N/A</p>
                       <p className="text-sm text-gray-500">Countries</p>
                     </div>
                   </div>
@@ -681,20 +632,7 @@ export default function ArticleDetailPage() {
               {/* Usage Chart Placeholder */}
               <div className="mt-6 rounded-lg bg-gray-50 p-4">
                 <h4 className="mb-4 font-semibold text-gray-900">Monthly Usage</h4>
-                <div className="space-y-3">
-                  {["Jan", "Feb", "Mar", "Apr", "May", "Jun"].map((month, idx) => {
-                    const value = Math.floor(Math.random() * 60) + 40
-                    return (
-                      <div key={month} className="flex items-center gap-3">
-                        <span className="w-10 text-sm text-gray-500">{month}</span>
-                        <Progress value={value} className="flex-1 h-2" />
-                        <span className="w-12 text-right text-sm font-medium text-gray-700">
-                          {Math.floor((metrics.views / 6) * (value / 50))}
-                        </span>
-                      </div>
-                    )
-                  })}
-                </div>
+                <p className="text-sm text-gray-500 italic">Not available.</p>
               </div>
             </section>
 
@@ -709,7 +647,7 @@ export default function ArticleDetailPage() {
                       href={ROUTES.browseArticle(related.id)}
                       className="block rounded-lg border border-gray-100 p-4 transition-colors hover:bg-gray-50"
                     >
-                      <h4 className="font-medium text-[#006b7b] hover:underline">{related.title}</h4>
+                      <h4 className="font-medium text-primary hover:underline">{related.title}</h4>
                       <p className="mt-1 text-sm text-gray-500 line-clamp-2">{related.abstract}</p>
                       <div className="mt-2 flex flex-wrap gap-1">
                         {related.keywords.slice(0, 3).map((k) => (
@@ -727,16 +665,12 @@ export default function ArticleDetailPage() {
             {/* License Info */}
             <section className="rounded-lg bg-gray-50 p-4 text-sm text-gray-600">
               <p>
-                <strong>CCBY</strong> - This article is licensed under a Creative Commons Attribution license. Please
-                follow the instructions via{" "}
-                <Link
-                  href="https://creativecommons.org/licenses/by/4.0/"
-                  className="text-[#006b7b] hover:underline"
-                  target="_blank"
-                >
+                This work is licensed under a Creative Commons Attribution 4.0 International License. If you reuse or
+                distribute the work, please cite the original source and follow the instructions via{" "}
+                <Link href="https://creativecommons.org/licenses/by/4.0/" className="text-primary hover:underline" target="_blank">
                   https://creativecommons.org/licenses/by/4.0/
-                </Link>{" "}
-                to obtain full-text articles and stipulations in the API documentation.
+                </Link>
+                .
               </p>
             </section>
           </div>
@@ -744,7 +678,7 @@ export default function ArticleDetailPage() {
       </main>
 
       {/* Footer */}
-      <footer className="mt-12 bg-[#1a1a2e] py-8 text-white">
+      <footer className="mt-12 bg-primary py-8 text-primary-foreground">
         <div className="mx-auto max-w-7xl px-4">
           <div className="grid gap-8 md:grid-cols-4">
             <div>

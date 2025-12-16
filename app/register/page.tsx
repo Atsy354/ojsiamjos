@@ -2,13 +2,12 @@
 
 import type React from "react"
 
-import { useState } from "react"
+import { useEffect, useState } from "react"
 import { useRouter } from "next/navigation"
 import Link from "next/link"
-import { userService } from "@/lib/services/user-service"
-import { journalService } from "@/lib/services/journal-service"
 import { useAuth } from "@/lib/hooks/use-auth"
 import { ROUTES } from "@/lib/constants"
+import { apiPost } from "@/lib/api/client"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
@@ -22,6 +21,7 @@ import {
   User,
   Mail,
   Lock,
+  Phone,
   Building2,
   Globe,
   CheckCircle2,
@@ -31,24 +31,39 @@ import {
 
 export default function RegisterPage() {
   const router = useRouter()
-  const { login, setCurrentJournal } = useAuth()
+  const { setCurrentJournal } = useAuth()
   const [isLoading, setIsLoading] = useState(false)
   const [error, setError] = useState("")
   const [success, setSuccess] = useState(false)
   const [formData, setFormData] = useState({
+    username: "",
+    salutation: "",
     firstName: "",
+    middleName: "",
     lastName: "",
     email: "",
+    confirmEmail: "",
+    whatsappNumber: "",
+    phone: "",
     password: "",
     confirmPassword: "",
     affiliation: "",
+    country: "",
     orcid: "",
+    workingLanguages: [] as string[],
+    reviewingInterests: "",
+    registerAsAuthor: true,
+    registerAsReviewer: false,
+    receiveNotifications: true,
+    agreePrivacy: false,
     journalId: "",
-    role: "author" as "author" | "reviewer",
-    agreeTerms: false,
   })
 
-  const journals = journalService.getAll()
+  useEffect(() => {
+    const url = new URL(window.location.href)
+    const jid = url.searchParams.get("journalId")
+    if (jid) setFormData((prev) => ({ ...prev, journalId: jid }))
+  }, [])
 
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const { name, value } = e.target
@@ -62,19 +77,21 @@ export default function RegisterPage() {
   }
 
   const validateForm = (): string | null => {
+    if (!formData.username.trim()) return "Username is required"
     if (!formData.firstName.trim()) return "First name is required"
     if (!formData.lastName.trim()) return "Last name is required"
     if (!formData.email.trim()) return "Email is required"
     if (!formData.email.includes("@")) return "Please enter a valid email address"
+    if (!formData.confirmEmail.trim()) return "Please confirm your email"
+    if (formData.email.trim().toLowerCase() !== formData.confirmEmail.trim().toLowerCase()) return "Emails do not match"
+    if (!formData.phone.trim()) return "Phone is required"
+    if (!formData.whatsappNumber.trim()) return "WhatsApp is required"
     if (!formData.password) return "Password is required"
     if (formData.password.length < 6) return "Password must be at least 6 characters"
     if (formData.password !== formData.confirmPassword) return "Passwords do not match"
-    if (!formData.journalId) return "Please select a journal"
-    if (!formData.agreeTerms) return "You must agree to the terms and conditions"
-
-    // Check if email already exists
-    const existingUser = userService.getByEmail(formData.email)
-    if (existingUser) return "An account with this email already exists"
+    if (!formData.registerAsAuthor && !formData.registerAsReviewer) return "Select at least one role (Author or Reviewer)"
+    if (formData.registerAsReviewer && !formData.reviewingInterests.trim()) return "Reviewing interests is required for Reviewer"
+    if (!formData.agreePrivacy) return "You must agree to the privacy statement"
 
     return null
   }
@@ -92,33 +109,58 @@ export default function RegisterPage() {
     }
 
     try {
-      const selectedJournal = journals.find((j) => j.id === formData.journalId)
+      const roles: Array<"author" | "reviewer"> = []
+      if (formData.registerAsAuthor) roles.push("author")
+      if (formData.registerAsReviewer) roles.push("reviewer")
 
-      const newUser = userService.create({
-        name: `${formData.firstName} ${formData.lastName}`,
+      await apiPost("/api/auth/register", {
+        username: formData.username,
+        salutation: formData.salutation || undefined,
         email: formData.email,
-        roles: [formData.role],
-        journalId: formData.journalId,
+        whatsappNumber: formData.whatsappNumber || undefined,
+        phone: formData.phone || undefined,
+        password: formData.password,
+        firstName: formData.firstName,
+        middleName: formData.middleName || undefined,
+        lastName: formData.lastName,
         affiliation: formData.affiliation || undefined,
+        country: formData.country || undefined,
         orcid: formData.orcid || undefined,
-        avatar: `/placeholder.svg?height=100&width=100&query=${formData.firstName} ${formData.lastName} avatar`,
-        bio: `${formData.role === "author" ? "Author" : "Reviewer"} at ${selectedJournal?.name || "IamJOS"}`,
+        roles,
+        reviewingInterests: formData.registerAsReviewer ? formData.reviewingInterests : undefined,
+        workingLanguages: formData.workingLanguages,
+        receiveNotifications: formData.receiveNotifications,
+        agreePrivacy: formData.agreePrivacy,
+        journalId: formData.journalId || undefined,
+      })
+
+      const loginResp = await apiPost("/api/auth/login", {
+        email: formData.email,
+        password: formData.password,
       })
 
       setSuccess(true)
 
       // Auto login after registration
       setTimeout(() => {
-        login(newUser)
-        if (selectedJournal) {
-          setCurrentJournal(selectedJournal)
-          router.push(ROUTES.journalDashboard(selectedJournal.path))
+        setCurrentJournal(null as any)
+
+        const rolesFromLogin: string[] = Array.isArray((loginResp as any)?.user?.roles) ? (loginResp as any).user.roles : []
+        if (rolesFromLogin.includes("admin")) {
+          router.push(ROUTES.ADMIN)
+        } else if (rolesFromLogin.includes("manager") || rolesFromLogin.includes("editor")) {
+          router.push(ROUTES.DASHBOARD)
+        } else if (rolesFromLogin.includes("author")) {
+          router.push(ROUTES.MY_SUBMISSIONS)
+        } else if (rolesFromLogin.includes("reviewer")) {
+          router.push(ROUTES.REVIEWS)
         } else {
           router.push(ROUTES.DASHBOARD)
         }
       }, 2000)
     } catch (err) {
-      setError("An error occurred during registration. Please try again.")
+      const message = err instanceof Error ? err.message : "An error occurred during registration. Please try again."
+      setError(message)
     } finally {
       setIsLoading(false)
     }
@@ -126,20 +168,18 @@ export default function RegisterPage() {
 
   if (success) {
     return (
-      <div className="min-h-screen bg-gradient-to-br from-slate-50 via-white to-teal-50/30 flex items-center justify-center p-4">
-        <Card className="w-full max-w-md text-center">
-          <CardContent className="pt-8 pb-8">
-            <div className="w-16 h-16 bg-green-100 rounded-full flex items-center justify-center mx-auto mb-4">
-              <CheckCircle2 className="h-8 w-8 text-green-600" />
-            </div>
-            <h2 className="text-2xl font-bold text-foreground mb-2">Registration Successful!</h2>
+      <div className="min-h-screen bg-background flex items-center justify-center p-4">
+        <Card className="w-full max-w-md">
+          <CardContent className="pt-6 text-center">
+            <CheckCircle2 className="h-12 w-12 text-primary mx-auto mb-4" />
+            <h2 className="text-2xl font-bold mb-2">Registration Successful!</h2>
             <p className="text-muted-foreground mb-4">
               Your account has been created. Redirecting to your dashboard...
             </p>
             <div className="flex items-center justify-center gap-2">
-              <div className="w-2 h-2 bg-teal-600 rounded-full animate-bounce" style={{ animationDelay: "0ms" }} />
-              <div className="w-2 h-2 bg-teal-600 rounded-full animate-bounce" style={{ animationDelay: "150ms" }} />
-              <div className="w-2 h-2 bg-teal-600 rounded-full animate-bounce" style={{ animationDelay: "300ms" }} />
+              <div className="w-2 h-2 bg-primary rounded-full animate-bounce" style={{ animationDelay: "0ms" }} />
+              <div className="w-2 h-2 bg-primary rounded-full animate-bounce" style={{ animationDelay: "150ms" }} />
+              <div className="w-2 h-2 bg-primary rounded-full animate-bounce" style={{ animationDelay: "300ms" }} />
             </div>
           </CardContent>
         </Card>
@@ -148,19 +188,16 @@ export default function RegisterPage() {
   }
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-slate-50 via-white to-teal-50/30">
+    <div className="min-h-screen bg-background">
       {/* Header */}
       <div className="border-b bg-white/80 backdrop-blur-sm">
         <div className="container mx-auto px-4 py-4">
-          <div className="flex items-center justify-between">
-            <Link
-              href={ROUTES.HOME}
-              className="flex items-center gap-2 text-muted-foreground hover:text-foreground transition-colors"
-            >
+          <div className="flex items-center justify-between mb-8">
+            <Link href={ROUTES.HOME} className="flex items-center gap-2 text-muted-foreground hover:text-foreground">
               <ArrowLeft className="h-4 w-4" />
               <span>Back to Home</span>
             </Link>
-            <Link href={ROUTES.LOGIN} className="text-sm text-teal-600 hover:text-teal-700 font-medium">
+            <Link href={ROUTES.LOGIN} className="text-sm text-primary hover:text-primary/90 font-medium">
               Already have an account? Sign in
             </Link>
           </div>
@@ -171,13 +208,11 @@ export default function RegisterPage() {
         <div className="max-w-2xl mx-auto">
           {/* Branding */}
           <div className="text-center mb-8">
-            <div className="inline-flex items-center justify-center w-16 h-16 bg-teal-600 rounded-2xl mb-4">
+            <div className="inline-flex items-center justify-center w-16 h-16 bg-primary rounded-2xl mb-4">
               <BookOpen className="h-8 w-8 text-white" />
             </div>
             <h1 className="text-3xl font-bold text-foreground">Create an Account</h1>
-            <p className="text-muted-foreground mt-2">
-              Join IamJOS to submit manuscripts, review papers, or explore academic journals
-            </p>
+            <p className="text-muted-foreground mt-2">Join our academic publishing platform</p>
           </div>
 
           {/* Registration Form */}
@@ -198,222 +233,350 @@ export default function RegisterPage() {
                   </div>
                 )}
 
-                {/* Name Fields */}
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  <div className="space-y-2">
-                    <Label htmlFor="firstName">First Name *</Label>
-                    <div className="relative">
-                      <User className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-                      <Input
-                        id="firstName"
-                        name="firstName"
-                        type="text"
-                        placeholder="John"
-                        value={formData.firstName}
-                        onChange={handleInputChange}
-                        className="pl-10"
-                        required
-                      />
-                    </div>
-                  </div>
-                  <div className="space-y-2">
-                    <Label htmlFor="lastName">Last Name *</Label>
-                    <div className="relative">
-                      <User className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-                      <Input
-                        id="lastName"
-                        name="lastName"
-                        type="text"
-                        placeholder="Doe"
-                        value={formData.lastName}
-                        onChange={handleInputChange}
-                        className="pl-10"
-                        required
-                      />
-                    </div>
-                  </div>
-                </div>
+                {/* Account Information */}
+                <div className="rounded-lg border bg-white p-4 space-y-4">
+                  <h3 className="font-semibold text-foreground">Account Information</h3>
 
-                {/* Email */}
-                <div className="space-y-2">
-                  <Label htmlFor="email">Email Address *</Label>
-                  <div className="relative">
-                    <Mail className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                  <div className="space-y-2">
+                    <Label htmlFor="username">Username *</Label>
                     <Input
-                      id="email"
-                      name="email"
-                      type="email"
-                      placeholder="john.doe@university.edu"
-                      value={formData.email}
+                      id="username"
+                      name="username"
+                      type="text"
+                      placeholder="e.g. johndoe"
+                      value={formData.username}
                       onChange={handleInputChange}
-                      className="pl-10"
                       required
                     />
                   </div>
-                  <p className="text-xs text-muted-foreground">Use your institutional email for verification</p>
-                </div>
 
-                {/* Password Fields */}
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  <div className="space-y-2">
-                    <Label htmlFor="password">Password *</Label>
-                    <div className="relative">
-                      <Lock className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-                      <Input
-                        id="password"
-                        name="password"
-                        type="password"
-                        placeholder="Min. 6 characters"
-                        value={formData.password}
-                        onChange={handleInputChange}
-                        className="pl-10"
-                        required
-                      />
-                    </div>
-                  </div>
-                  <div className="space-y-2">
-                    <Label htmlFor="confirmPassword">Confirm Password *</Label>
-                    <div className="relative">
-                      <Lock className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-                      <Input
-                        id="confirmPassword"
-                        name="confirmPassword"
-                        type="password"
-                        placeholder="Confirm password"
-                        value={formData.confirmPassword}
-                        onChange={handleInputChange}
-                        className="pl-10"
-                        required
-                      />
-                    </div>
-                  </div>
-                </div>
-
-                {/* Affiliation & ORCID */}
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  <div className="space-y-2">
-                    <Label htmlFor="affiliation">Affiliation</Label>
-                    <div className="relative">
-                      <Building2 className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-                      <Input
-                        id="affiliation"
-                        name="affiliation"
-                        type="text"
-                        placeholder="University or Organization"
-                        value={formData.affiliation}
-                        onChange={handleInputChange}
-                        className="pl-10"
-                      />
-                    </div>
-                  </div>
-                  <div className="space-y-2">
-                    <Label htmlFor="orcid">ORCID iD</Label>
-                    <div className="relative">
-                      <Globe className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-                      <Input
-                        id="orcid"
-                        name="orcid"
-                        type="text"
-                        placeholder="0000-0000-0000-0000"
-                        value={formData.orcid}
-                        onChange={handleInputChange}
-                        className="pl-10"
-                      />
-                    </div>
-                  </div>
-                </div>
-
-                {/* Journal Selection */}
-                <div className="space-y-2">
-                  <Label htmlFor="journalId">Select Journal *</Label>
-                  <Select value={formData.journalId} onValueChange={(value) => handleSelectChange("journalId", value)}>
-                    <SelectTrigger>
-                      <SelectValue placeholder="Choose a journal to join" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {journals.map((journal) => (
-                        <SelectItem key={journal.id} value={journal.id}>
-                          <div className="flex items-center gap-2">
-                            <span className="font-medium">{journal.acronym}</span>
-                            <span className="text-muted-foreground">- {journal.name}</span>
-                          </div>
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                  <p className="text-xs text-muted-foreground">You can request access to more journals later</p>
-                </div>
-
-                {/* Role Selection */}
-                <div className="space-y-3">
-                  <Label>Register as *</Label>
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                    <button
-                      type="button"
-                      onClick={() => handleSelectChange("role", "author")}
-                      className={`p-4 rounded-lg border-2 text-left transition-all ${
-                        formData.role === "author"
-                          ? "border-teal-600 bg-teal-50"
-                          : "border-border hover:border-teal-300 bg-background"
-                      }`}
-                    >
-                      <div className="flex items-start gap-3">
-                        <div className={`p-2 rounded-lg ${formData.role === "author" ? "bg-teal-100" : "bg-muted"}`}>
-                          <FileText
-                            className={`h-5 w-5 ${formData.role === "author" ? "text-teal-600" : "text-muted-foreground"}`}
-                          />
-                        </div>
-                        <div>
-                          <h4 className="font-semibold text-foreground">Author</h4>
-                          <p className="text-sm text-muted-foreground">Submit manuscripts and track submissions</p>
-                        </div>
+                    <div className="space-y-2">
+                      <Label htmlFor="password">Password *</Label>
+                      <div className="relative">
+                        <Lock className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                        <Input
+                          id="password"
+                          name="password"
+                          type="password"
+                          placeholder="Min. 6 characters"
+                          value={formData.password}
+                          onChange={handleInputChange}
+                          className="pl-10"
+                          required
+                        />
                       </div>
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => handleSelectChange("role", "reviewer")}
-                      className={`p-4 rounded-lg border-2 text-left transition-all ${
-                        formData.role === "reviewer"
-                          ? "border-purple-600 bg-purple-50"
-                          : "border-border hover:border-purple-300 bg-background"
-                      }`}
-                    >
-                      <div className="flex items-start gap-3">
-                        <div
-                          className={`p-2 rounded-lg ${formData.role === "reviewer" ? "bg-purple-100" : "bg-muted"}`}
-                        >
-                          <Eye
-                            className={`h-5 w-5 ${formData.role === "reviewer" ? "text-purple-600" : "text-muted-foreground"}`}
-                          />
-                        </div>
-                        <div>
-                          <h4 className="font-semibold text-foreground">Reviewer</h4>
-                          <p className="text-sm text-muted-foreground">Peer review papers and provide feedback</p>
-                        </div>
+                    </div>
+                    <div className="space-y-2">
+                      <Label htmlFor="confirmPassword">Repeat Password *</Label>
+                      <div className="relative">
+                        <Lock className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                        <Input
+                          id="confirmPassword"
+                          name="confirmPassword"
+                          type="password"
+                          placeholder="Repeat password"
+                          value={formData.confirmPassword}
+                          onChange={handleInputChange}
+                          className="pl-10"
+                          required
+                        />
                       </div>
-                    </button>
+                    </div>
                   </div>
                 </div>
 
-                {/* Terms Agreement */}
+                {/* Profile Information */}
+                <div className="rounded-lg border bg-white p-4 space-y-4">
+                  <h3 className="font-semibold text-foreground">Profile Information</h3>
+
+                  <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                    <div className="space-y-2">
+                      <Label htmlFor="salutation">Salutation</Label>
+                      <Select value={formData.salutation} onValueChange={(v) => handleSelectChange("salutation", v)}>
+                        <SelectTrigger>
+                          <SelectValue placeholder="Select" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="Mr">Mr</SelectItem>
+                          <SelectItem value="Mrs">Mrs</SelectItem>
+                          <SelectItem value="Ms">Ms</SelectItem>
+                          <SelectItem value="Dr">Dr</SelectItem>
+                          <SelectItem value="Prof">Prof</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </div>
+                    <div className="space-y-2">
+                      <Label htmlFor="firstName">First Name *</Label>
+                      <div className="relative">
+                        <User className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                        <Input
+                          id="firstName"
+                          name="firstName"
+                          type="text"
+                          placeholder="John"
+                          value={formData.firstName}
+                          onChange={handleInputChange}
+                          className="pl-10"
+                          required
+                        />
+                      </div>
+                    </div>
+                    <div className="space-y-2">
+                      <Label htmlFor="middleName">Middle Name</Label>
+                      <Input
+                        id="middleName"
+                        name="middleName"
+                        type="text"
+                        placeholder="Optional"
+                        value={formData.middleName}
+                        onChange={handleInputChange}
+                      />
+                    </div>
+                  </div>
+
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div className="space-y-2">
+                      <Label htmlFor="lastName">Last Name *</Label>
+                      <div className="relative">
+                        <User className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                        <Input
+                          id="lastName"
+                          name="lastName"
+                          type="text"
+                          placeholder="Doe"
+                          value={formData.lastName}
+                          onChange={handleInputChange}
+                          className="pl-10"
+                          required
+                        />
+                      </div>
+                    </div>
+                    <div className="space-y-2">
+                      <Label htmlFor="affiliation">Affiliation</Label>
+                      <div className="relative">
+                        <Building2 className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                        <Input
+                          id="affiliation"
+                          name="affiliation"
+                          type="text"
+                          placeholder="University or Organization"
+                          value={formData.affiliation}
+                          onChange={handleInputChange}
+                          className="pl-10"
+                        />
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div className="space-y-2">
+                      <Label htmlFor="country">Country</Label>
+                      <Input
+                        id="country"
+                        name="country"
+                        type="text"
+                        placeholder="e.g. Indonesia"
+                        value={formData.country}
+                        onChange={handleInputChange}
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      <Label htmlFor="orcid">ORCID iD</Label>
+                      <div className="relative">
+                        <Globe className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                        <Input
+                          id="orcid"
+                          name="orcid"
+                          type="text"
+                          placeholder="0000-0000-0000-0000"
+                          value={formData.orcid}
+                          onChange={handleInputChange}
+                          className="pl-10"
+                        />
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Contact Information */}
+                <div className="rounded-lg border bg-white p-4 space-y-4">
+                  <h3 className="font-semibold text-foreground">Contact Information</h3>
+
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div className="space-y-2">
+                      <Label htmlFor="email">Email Address *</Label>
+                      <div className="relative">
+                        <Mail className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                        <Input
+                          id="email"
+                          name="email"
+                          type="email"
+                          placeholder="john.doe@university.edu"
+                          value={formData.email}
+                          onChange={handleInputChange}
+                          className="pl-10"
+                          required
+                        />
+                      </div>
+                    </div>
+                    <div className="space-y-2">
+                      <Label htmlFor="confirmEmail">Confirm Email *</Label>
+                      <div className="relative">
+                        <Mail className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                        <Input
+                          id="confirmEmail"
+                          name="confirmEmail"
+                          type="email"
+                          placeholder="Repeat email"
+                          value={formData.confirmEmail}
+                          onChange={handleInputChange}
+                          className="pl-10"
+                          required
+                        />
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div className="space-y-2">
+                      <Label htmlFor="phone">Phone *</Label>
+                      <div className="relative">
+                        <Phone className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                        <Input
+                          id="phone"
+                          name="phone"
+                          type="tel"
+                          placeholder="e.g. +628..."
+                          value={formData.phone}
+                          onChange={handleInputChange}
+                          className="pl-10"
+                          required
+                        />
+                      </div>
+                    </div>
+                    <div className="space-y-2">
+                      <Label htmlFor="whatsappNumber">WhatsApp *</Label>
+                      <div className="relative">
+                        <Phone className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                        <Input
+                          id="whatsappNumber"
+                          name="whatsappNumber"
+                          type="tel"
+                          placeholder="e.g. +628..."
+                          value={formData.whatsappNumber}
+                          onChange={handleInputChange}
+                          className="pl-10"
+                          required
+                        />
+                      </div>
+                    </div>
+                  </div>
+                </div>
+                {/* Locales */}
+                <div className="rounded-lg border bg-white p-4 space-y-4">
+                  <h3 className="font-semibold text-foreground">Working Language(s)</h3>
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                    {[
+                      { id: "id", label: "Indonesian" },
+                      { id: "en", label: "English" },
+                    ].map((opt) => (
+                      <label key={opt.id} className="flex items-center gap-2 text-sm">
+                        <Checkbox
+                          checked={formData.workingLanguages.includes(opt.id)}
+                          onCheckedChange={(checked) => {
+                            setFormData((prev) => {
+                              const next = new Set(prev.workingLanguages)
+                              if (checked === true) next.add(opt.id)
+                              else next.delete(opt.id)
+                              return { ...prev, workingLanguages: Array.from(next) }
+                            })
+                          }}
+                        />
+                        <span>{opt.label}</span>
+                      </label>
+                    ))}
+                  </div>
+                  <p className="text-xs text-muted-foreground">Select languages you are comfortable working in.</p>
+                </div>
+
+                {/* Roles */}
+                <div className="rounded-lg border bg-white p-4 space-y-4">
+                  <h3 className="font-semibold text-foreground">Roles</h3>
+
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                    <label className="flex items-start gap-2 rounded-lg border p-3 bg-muted/20">
+                      <Checkbox
+                        checked={formData.registerAsAuthor}
+                        onCheckedChange={(checked) => setFormData((prev) => ({ ...prev, registerAsAuthor: checked === true }))}
+                        className="mt-0.5"
+                      />
+                      <div>
+                        <div className="flex items-center gap-2">
+                          <FileText className="h-4 w-4 text-primary" />
+                          <span className="font-medium">Author</span>
+                        </div>
+                        <p className="text-xs text-muted-foreground mt-1">Can submit papers.</p>
+                      </div>
+                    </label>
+
+                    <label className="flex items-start gap-2 rounded-lg border p-3 bg-muted/20">
+                      <Checkbox
+                        checked={formData.registerAsReviewer}
+                        onCheckedChange={(checked) => setFormData((prev) => ({ ...prev, registerAsReviewer: checked === true }))}
+                        className="mt-0.5"
+                      />
+                      <div>
+                        <div className="flex items-center gap-2">
+                          <Eye className="h-4 w-4 text-primary" />
+                          <span className="font-medium">Reviewer</span>
+                        </div>
+                        <p className="text-xs text-muted-foreground mt-1">Can perform peer review.</p>
+                      </div>
+                    </label>
+                  </div>
+
+                  {formData.registerAsReviewer && (
+                    <div className="space-y-2">
+                      <Label htmlFor="reviewingInterests">Reviewing Interests *</Label>
+                      <Input
+                        id="reviewingInterests"
+                        name="reviewingInterests"
+                        type="text"
+                        placeholder="e.g. AI, Networking, Education"
+                        value={formData.reviewingInterests}
+                        onChange={handleInputChange}
+                        required
+                      />
+                      <p className="text-xs text-muted-foreground">Comma-separated keywords of your expertise.</p>
+                    </div>
+                  )}
+                </div>
+
+                {/* Notifications */}
+                <div className="rounded-lg border bg-white p-4 space-y-3">
+                  <h3 className="font-semibold text-foreground">Notifications</h3>
+                  <label className="flex items-start gap-2 text-sm">
+                    <Checkbox
+                      checked={formData.receiveNotifications}
+                      onCheckedChange={(checked) => setFormData((prev) => ({ ...prev, receiveNotifications: checked === true }))}
+                      className="mt-0.5"
+                    />
+                    <span>Receive notifications by email</span>
+                  </label>
+                </div>
+
+                {/* Privacy */}
                 <div className="flex items-start gap-3 p-4 bg-muted/50 rounded-lg">
                   <Checkbox
-                    id="agreeTerms"
-                    checked={formData.agreeTerms}
-                    onCheckedChange={(checked) => setFormData((prev) => ({ ...prev, agreeTerms: checked === true }))}
+                    id="agreePrivacy"
+                    checked={formData.agreePrivacy}
+                    onCheckedChange={(checked) => setFormData((prev) => ({ ...prev, agreePrivacy: checked === true }))}
                     className="mt-0.5"
                   />
                   <div className="flex-1">
-                    <Label htmlFor="agreeTerms" className="text-sm cursor-pointer">
-                      I agree to the{" "}
-                      <Link href="#" className="text-teal-600 hover:underline">
-                        Terms of Service
-                      </Link>{" "}
-                      and{" "}
-                      <Link href="#" className="text-teal-600 hover:underline">
-                        Privacy Policy
-                      </Link>
-                      , and I confirm that the information provided is accurate. *
+                    <Label htmlFor="agreePrivacy" className="text-sm cursor-pointer">
+                      Yes, I agree to have my data collected and stored according to the privacy statement. *
                     </Label>
                   </div>
                 </div>
@@ -421,7 +584,7 @@ export default function RegisterPage() {
                 {/* Submit Button */}
                 <Button
                   type="submit"
-                  className="w-full bg-teal-600 hover:bg-teal-700 text-white h-12 text-base"
+                  className="w-full bg-primary hover:bg-primary/90 text-primary-foreground h-12 text-base"
                   disabled={isLoading}
                 >
                   {isLoading ? (
@@ -437,7 +600,7 @@ export default function RegisterPage() {
                 {/* Sign In Link */}
                 <p className="text-center text-sm text-muted-foreground">
                   Already have an account?{" "}
-                  <Link href={ROUTES.LOGIN} className="text-teal-600 hover:underline font-medium">
+                  <Link href={ROUTES.LOGIN} className="text-primary hover:underline font-medium">
                     Sign in here
                   </Link>
                 </p>
@@ -449,7 +612,7 @@ export default function RegisterPage() {
           <div className="mt-8 text-center text-sm text-muted-foreground">
             <p>
               Need help? Contact{" "}
-              <a href="mailto:support@iamjos.org" className="text-teal-600 hover:underline">
+              <a href="mailto:support@iamjos.org" className="text-primary hover:underline">
                 support@iamjos.org
               </a>
             </p>

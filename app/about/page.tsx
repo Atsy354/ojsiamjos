@@ -3,19 +3,37 @@ import { Footer } from "@/components/public/footer"
 import { Button } from "@/components/ui/button"
 import { BookOpen, Users, Globe, Award, Target, Heart, ArrowRight, CheckCircle } from "lucide-react"
 import Link from "next/link"
+import { supabaseAdmin } from "@/lib/supabase/server"
 
 export const metadata = {
   title: "About Us - IamJOS",
   description: "Learn about IamJOS - Integrated Management Journal System for academic publishing",
 }
 
-export default function AboutPage() {
-  const stats = [
-    { value: "500+", label: "Researchers" },
-    { value: "50+", label: "Journals" },
-    { value: "1000+", label: "Publications" },
-    { value: "30+", label: "Countries" },
+export default async function AboutPage() {
+  let stats = [
+    { value: "N/A", label: "Researchers" },
+    { value: "N/A", label: "Journals" },
+    { value: "N/A", label: "Publications" },
+    { value: "N/A", label: "Countries" },
   ]
+
+  try {
+    const { count: usersCount } = await supabaseAdmin.from("users").select("*", { count: "exact", head: true })
+    const { count: journalsCount } = await supabaseAdmin.from("journals").select("*", { count: "exact", head: true })
+    const { count: publicationsCount } = await supabaseAdmin
+      .from("publications")
+      .select("*", { count: "exact", head: true })
+
+    stats = [
+      { value: String(usersCount ?? 0), label: "Researchers" },
+      { value: String(journalsCount ?? 0), label: "Journals" },
+      { value: String(publicationsCount ?? 0), label: "Publications" },
+      { value: "N/A", label: "Countries" },
+    ]
+  } catch {
+    // keep N/A fallback
+  }
 
   const values = [
     {

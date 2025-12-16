@@ -5,6 +5,7 @@ import type React from "react"
 import { useState } from "react"
 import { Topbar } from "@/components/public/topbar"
 import { Footer } from "@/components/public/footer"
+import { apiPost } from "@/lib/api/client"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Textarea } from "@/components/ui/textarea"
@@ -38,20 +39,43 @@ export default function ContactPage() {
   })
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [isSubmitted, setIsSubmitted] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+  const [errorSql, setErrorSql] = useState<string | null>(null)
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     setIsSubmitting(true)
+    setError(null)
+    setErrorSql(null)
 
-    // Simulate form submission
-    await new Promise((resolve) => setTimeout(resolve, 1500))
+    try {
+      await apiPost<{ ok: boolean }>("/api/contact", {
+        name: formData.name,
+        email: formData.email,
+        subject: formData.subject,
+        category: formData.category,
+        message: formData.message,
+      })
 
-    setIsSubmitting(false)
-    setIsSubmitted(true)
-    setFormData({ name: "", email: "", subject: "", category: "", message: "" })
+      setIsSubmitted(true)
+      setFormData({ name: "", email: "", subject: "", category: "", message: "" })
 
-    // Reset success message after 5 seconds
-    setTimeout(() => setIsSubmitted(false), 5000)
+      // Reset success message after 5 seconds
+      setTimeout(() => setIsSubmitted(false), 5000)
+    } catch (err: any) {
+      const status = err?.status
+      const details = err?.details
+      const sql = typeof details?.sql === "string" ? details.sql : null
+      if (status === 501 && sql) {
+        setError("Sistem belum siap menyimpan pesan. Jalankan SQL berikut di Supabase SQL Editor, lalu coba kirim ulang.")
+        setErrorSql(sql)
+      } else {
+        const msg = err?.message || "Gagal mengirim pesan. Silakan coba lagi."
+        setError(msg)
+      }
+    } finally {
+      setIsSubmitting(false)
+    }
   }
 
   const contactInfo = [
@@ -302,11 +326,22 @@ export default function ContactPage() {
                 </p>
 
                 {isSubmitted && (
-                  <div className="mb-6 p-4 rounded-lg bg-green-500/10 border border-green-500/20 flex items-center gap-3">
-                    <CheckCircle className="w-5 h-5 text-green-500" />
-                    <p className="text-sm text-green-600">
-                      Terima kasih atas pesan Anda! Kami akan merespon dalam 24 jam.
+                  <div className="mb-6 p-4 rounded-lg bg-primary/10 border border-primary/20 flex items-center gap-3">
+                    <CheckCircle className="w-5 h-5 text-primary" />
+                    <p className="text-sm text-primary">
+                      Pesan berhasil dikirim. Kami akan merespon dalam 24 jam.
                     </p>
+                  </div>
+                )}
+
+                {error && (
+                  <div className="mb-6 p-4 rounded-lg bg-red-500/10 border border-red-500/20">
+                    <p className="text-sm text-red-600">{error}</p>
+                    {errorSql && (
+                      <pre className="mt-3 max-h-56 overflow-auto rounded bg-background p-3 text-xs text-foreground">
+                        {errorSql}
+                      </pre>
+                    )}
                   </div>
                 )}
 

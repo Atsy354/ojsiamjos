@@ -26,22 +26,7 @@ const CONTENT_TYPES = [
   { id: "proceedings", label: "Conference Proceedings", count: 0 },
 ]
 
-// Publisher options
-const PUBLISHERS = [
-  { id: "academic", label: "Academic Publishing House" },
-  { id: "university", label: "University Press" },
-  { id: "society", label: "Scientific Society" },
-]
-
-// Topic/Subject areas
-const TOPICS = [
-  { id: "cs", label: "Computer Science" },
-  { id: "medical", label: "Medical Sciences" },
-  { id: "engineering", label: "Engineering" },
-  { id: "business", label: "Business & Finance" },
-  { id: "education", label: "Education" },
-  { id: "environment", label: "Environmental Science" },
-]
+// Topic/Subject areas are database-backed via journal_topics
 
 // Memoized Journal List Item Component
 const JournalListItem = memo(function JournalListItem({
@@ -60,11 +45,11 @@ const JournalListItem = memo(function JournalListItem({
   return (
     <div className="border-b border-gray-200 py-4 last:border-0">
       <div className="flex items-start justify-between gap-4">
-        <div className="flex-1">
+        <div className="min-w-0">
           {/* Journal Title */}
           <Link
             href={ROUTES.browseJournal(journal.path || journal.id)}
-            className="text-lg font-medium text-[#006b7b] hover:underline"
+            className="text-lg font-medium text-primary hover:underline"
           >
             {journal.name}
           </Link>
@@ -80,7 +65,7 @@ const JournalListItem = memo(function JournalListItem({
             {latestIssue && (
               <Link
                 href={ROUTES.browseJournal(journal.path || journal.id)}
-                className="text-[#006b7b] hover:underline flex items-center gap-1"
+                className="text-primary hover:underline flex items-center gap-1"
               >
                 Most Recent Issue
                 <ExternalLink className="h-3 w-3" />
@@ -95,7 +80,7 @@ const JournalListItem = memo(function JournalListItem({
           {journal.description && (
             <button
               onClick={onToggle}
-              className="mt-2 flex items-center gap-1 text-sm text-gray-500 hover:text-[#006b7b]"
+              className="mt-2 flex items-center gap-1 text-sm text-gray-500 hover:text-primary"
             >
               {expanded ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
               Journal Details
@@ -132,7 +117,7 @@ const FilterSection = memo(function FilterSection({
 
   return (
     <Collapsible open={isOpen} onOpenChange={setIsOpen}>
-      <CollapsibleTrigger className="flex w-full items-center justify-between py-2 font-semibold text-gray-800 hover:text-[#006b7b]">
+      <CollapsibleTrigger className="flex w-full items-center justify-between py-2 font-semibold text-gray-800 hover:text-primary">
         {title}
         {isOpen ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
       </CollapsibleTrigger>
@@ -158,13 +143,14 @@ export default function BrowsePage() {
   const [currentPage, setCurrentPage] = useState(1)
   const [activeTab, setActiveTab] = useState<"title" | "topic">("title")
   const [error, setError] = useState<string | null>(null)
+  const [activeOnly, setActiveOnly] = useState(true)
 
   useEffect(() => {
     const run = async () => {
       try {
         setMounted(true)
 
-        const allJournals = await apiGet<any[]>("/api/journals").catch(() => [])
+        const allJournals = await apiGet<any[]>("/api/browse/journals").catch(() => [])
         const journalsArr = Array.isArray(allJournals) ? allJournals : []
         setJournals(journalsArr as any)
 
@@ -188,9 +174,44 @@ export default function BrowsePage() {
     run()
   }, [])
 
+  const publisherOptions = useMemo(() => {
+    const set = new Set<string>()
+    for (const j of journals || []) {
+      const p = (j as any)?.publisher
+      if (typeof p === "string" && p.trim()) set.add(p.trim())
+    }
+    return Array.from(set).sort((a, b) => a.localeCompare(b))
+  }, [journals])
+
+  const topicOptions = useMemo(() => {
+    const set = new Set<string>()
+    for (const j of journals || []) {
+      const topics = (j as any)?.topics
+      if (!Array.isArray(topics)) continue
+      topics.forEach((t: any) => {
+        if (typeof t === "string" && t.trim()) set.add(t.trim())
+      })
+    }
+    return Array.from(set).sort((a, b) => a.localeCompare(b))
+  }, [journals])
+
+  const typeOptions = useMemo(() => {
+    const set = new Set<string>()
+    for (const j of journals || []) {
+      const t = (j as any)?.type
+      if (typeof t === "string" && t.trim()) set.add(t.trim())
+    }
+    return Array.from(set).sort((a, b) => a.localeCompare(b))
+  }, [journals])
+
   // Filter and sort journals
   const filteredJournals = useMemo(() => {
     let result = [...journals]
+
+    // Active titles only
+    if (activeOnly) {
+      result = result.filter((j: any) => j?.enabled !== false)
+    }
 
     // Filter by search
     if (search.trim()) {
@@ -212,6 +233,48 @@ export default function BrowsePage() {
       }
     }
 
+    // Show filter: open access
+    if (showFilter === "open-access") {
+      result = result.filter((j: any) => j?.isOpenAccess === true || j?.is_open_access === true)
+    }
+
+    // Content type filter
+    if (selectedTypes.size > 0) {
+      result = result.filter((j: any) => {
+        const t = typeof j?.type === "string" ? j.type.trim() : ""
+        if (!t) return false
+        return selectedTypes.has(t)
+      })
+    }
+
+    // Publisher filter
+    if (selectedPublishers.size > 0) {
+      result = result.filter((j: any) => {
+        const p = typeof j?.publisher === "string" ? j.publisher.trim() : ""
+        return p && selectedPublishers.has(p)
+      })
+    }
+
+    // Topic filter
+    if (selectedTopics.size > 0) {
+      result = result.filter((j: any) => {
+        const topics = Array.isArray(j?.topics) ? j.topics : []
+        return topics.some((t: any) => typeof t === "string" && selectedTopics.has(t))
+      })
+    }
+
+    // Year range filter (based on createdAt/created_at when available)
+    const fromYear = Number.parseInt(yearRange.from, 10)
+    const toYear = Number.parseInt(yearRange.to, 10)
+    if (Number.isFinite(fromYear) && Number.isFinite(toYear)) {
+      result = result.filter((j: any) => {
+        const dt = j?.createdAt || j?.created_at
+        if (!dt) return true
+        const y = new Date(dt).getFullYear()
+        return y >= fromYear && y <= toYear
+      })
+    }
+
     // Sort
     switch (sortBy) {
       case "title-asc":
@@ -229,7 +292,18 @@ export default function BrowsePage() {
     }
 
     return result
-  }, [journals, search, selectedLetter, sortBy])
+  }, [
+    journals,
+    activeOnly,
+    search,
+    selectedLetter,
+    showFilter,
+    selectedTypes,
+    selectedPublishers,
+    selectedTopics,
+    yearRange,
+    sortBy,
+  ])
 
   // Pagination
   const paginatedJournals = useMemo(() => {
@@ -252,6 +326,19 @@ export default function BrowsePage() {
     })
   }, [])
 
+  const togglePublisher = useCallback((publisher: string) => {
+    setSelectedPublishers((prev) => {
+      const next = new Set(prev)
+      if (next.has(publisher)) {
+        next.delete(publisher)
+      } else {
+        next.add(publisher)
+      }
+      return next
+    })
+    setCurrentPage(1)
+  }, [])
+
   const toggleContentType = useCallback((typeId: string) => {
     setSelectedTypes((prev) => {
       const next = new Set(prev)
@@ -262,6 +349,20 @@ export default function BrowsePage() {
       }
       return next
     })
+    setCurrentPage(1)
+  }, [])
+
+  const toggleTopic = useCallback((topic: string) => {
+    setSelectedTopics((prev) => {
+      const next = new Set(prev)
+      if (next.has(topic)) {
+        next.delete(topic)
+      } else {
+        next.add(topic)
+      }
+      return next
+    })
+    setCurrentPage(1)
   }, [])
 
   const clearFilters = useCallback(() => {
@@ -276,9 +377,9 @@ export default function BrowsePage() {
 
   if (!mounted) {
     return (
-      <div className="min-h-screen bg-[#f5f5f5]">
+      <div className="min-h-screen bg-background">
         <div className="flex items-center justify-center py-12">
-          <div className="h-8 w-8 animate-spin rounded-full border-4 border-[#006b7b] border-t-transparent" />
+          <div className="h-8 w-8 animate-spin rounded-full border-4 border-primary border-t-transparent" />
         </div>
       </div>
     )
@@ -286,7 +387,7 @@ export default function BrowsePage() {
 
   if (error) {
     return (
-      <div className="min-h-screen bg-[#f5f5f5] flex items-center justify-center">
+      <div className="min-h-screen bg-background flex items-center justify-center">
         <div className="text-center">
           <p className="text-red-600 mb-4">{error}</p>
           <Button onClick={() => window.location.reload()}>Reload Page</Button>
@@ -296,9 +397,9 @@ export default function BrowsePage() {
   }
 
   return (
-    <div className="min-h-screen bg-[#f5f5f5]">
+    <div className="min-h-screen bg-background">
       {/* IEEE-style Top Bar */}
-      <div className="bg-[#1a1a1a] text-white">
+      <div className="bg-primary text-primary-foreground">
         <div className="mx-auto flex h-8 max-w-7xl items-center justify-between px-4 text-xs">
           <div className="flex items-center gap-4">
             <Link href={ROUTES.HOME} className="hover:underline">
@@ -317,7 +418,7 @@ export default function BrowsePage() {
             <Link href={ROUTES.LOGIN} className="hover:underline">
               Sign In
             </Link>
-            <Link href={ROUTES.LOGIN} className="hover:underline">
+            <Link href={ROUTES.REGISTER ?? "/register"} className="hover:underline">
               Create Account
             </Link>
           </div>
@@ -325,11 +426,11 @@ export default function BrowsePage() {
       </div>
 
       {/* Main Header */}
-      <header className="bg-[#006b7b] text-white">
+      <header className="bg-primary text-primary-foreground">
         <div className="mx-auto max-w-7xl px-4 py-4">
           <div className="flex items-center justify-between">
             <Link href={ROUTES.HOME} className="flex items-center gap-3">
-              <div className="flex h-10 w-10 items-center justify-center rounded bg-white text-xl font-bold text-[#006b7b]">
+              <div className="flex h-10 w-10 items-center justify-center rounded bg-background text-xl font-bold text-primary">
                 IJ
               </div>
               <span className="text-xl font-bold">{APP_NAME}</span>
@@ -350,7 +451,12 @@ export default function BrowsePage() {
                 />
                 <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400" />
               </div>
-              <Button variant="secondary" className="bg-[#d4a84b] text-white hover:bg-[#c49a3d]">
+              <Button
+                type="button"
+                variant="secondary"
+                className="bg-accent text-accent-foreground hover:bg-accent/90"
+                onClick={() => setCurrentPage(1)}
+              >
                 <Search className="h-4 w-4" />
               </Button>
             </div>
@@ -361,9 +467,9 @@ export default function BrowsePage() {
       {/* Page Title */}
       <div className="border-b bg-white">
         <div className="mx-auto max-w-7xl px-4 py-6">
-          <h1 className="flex items-center gap-2 text-2xl font-light text-[#006b7b]">
+          <h1 className="flex items-center gap-2 text-2xl font-light text-primary">
             Browse Journals & Publications
-            <button className="text-gray-400 hover:text-[#006b7b]">
+            <button className="text-gray-400 hover:text-primary">
               <HelpCircle className="h-5 w-5" />
             </button>
           </h1>
@@ -378,7 +484,7 @@ export default function BrowsePage() {
               onClick={() => setActiveTab("title")}
               className={`border-b-2 px-6 py-3 text-sm font-medium transition-colors ${
                 activeTab === "title"
-                  ? "border-[#006b7b] text-[#006b7b]"
+                  ? "border-primary text-primary"
                   : "border-transparent text-gray-500 hover:text-gray-700"
               }`}
             >
@@ -388,7 +494,7 @@ export default function BrowsePage() {
               onClick={() => setActiveTab("topic")}
               className={`border-b-2 px-6 py-3 text-sm font-medium transition-colors ${
                 activeTab === "topic"
-                  ? "border-[#006b7b] text-[#006b7b]"
+                  ? "border-primary text-primary"
                   : "border-transparent text-gray-500 hover:text-gray-700"
               }`}
             >
@@ -416,17 +522,19 @@ export default function BrowsePage() {
               />
               <Button
                 size="sm"
-                className="absolute right-1 top-1/2 -translate-y-1/2 h-7 w-7 p-0 bg-[#006b7b] hover:bg-[#005a68]"
+                className="absolute right-1 top-1/2 -translate-y-1/2 h-7 w-7 p-0 bg-primary hover:bg-primary/90"
+                type="button"
+                onClick={() => setCurrentPage(1)}
               >
                 <Search className="h-3 w-3" />
               </Button>
             </div>
             <div className="ml-auto flex items-center gap-2 text-sm">
-              <Link href={ROUTES.SIGN_UP_FOR_ALERTS} className="text-[#006b7b] hover:underline">
+              <Link href={ROUTES.SIGN_UP_FOR_ALERTS} className="text-primary hover:underline">
                 Sign Up for Alerts
               </Link>
               <span className="text-gray-300">|</span>
-              <Link href={ROUTES.TITLE_LIST} className="text-[#006b7b] hover:underline">
+              <Link href={ROUTES.TITLE_LIST} className="text-primary hover:underline">
                 Title List
               </Link>
             </div>
@@ -443,7 +551,7 @@ export default function BrowsePage() {
                   setCurrentPage(1)
                 }}
                 className={`px-2 py-1 rounded transition-colors ${
-                  selectedLetter === letter ? "bg-[#006b7b] text-white" : "text-[#006b7b] hover:bg-[#006b7b]/10"
+                  selectedLetter === letter ? "bg-primary text-primary-foreground" : "text-primary hover:bg-primary/10"
                 }`}
               >
                 {letter}
@@ -456,7 +564,7 @@ export default function BrowsePage() {
                 setCurrentPage(1)
               }}
               className={`px-2 py-1 rounded transition-colors ${
-                selectedLetter === "0-9" ? "bg-[#006b7b] text-white" : "text-[#006b7b] hover:bg-[#006b7b]/10"
+                selectedLetter === "0-9" ? "bg-primary text-primary-foreground" : "text-primary hover:bg-primary/10"
               }`}
             >
               0-9
@@ -468,7 +576,7 @@ export default function BrowsePage() {
                 setCurrentPage(1)
               }}
               className={`px-2 py-1 rounded transition-colors ${
-                selectedLetter === null ? "bg-[#006b7b] text-white" : "text-[#006b7b] hover:bg-[#006b7b]/10"
+                selectedLetter === null ? "bg-primary text-primary-foreground" : "text-primary hover:bg-primary/10"
               }`}
             >
               All
@@ -512,7 +620,7 @@ export default function BrowsePage() {
                     setCurrentPage(1)
                   }}
                 >
-                  <SelectTrigger className="w-32 h-8 text-sm bg-[#d4a84b] text-white border-[#d4a84b]">
+                  <SelectTrigger className="w-32 h-8 text-sm bg-accent text-accent-foreground border-accent">
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
@@ -552,17 +660,10 @@ export default function BrowsePage() {
                         <HelpCircle className="h-3 w-3 text-gray-400" />
                       </Label>
                     </div>
-                    <div className="flex items-center gap-2">
-                      <RadioGroupItem value="some-open" id="show-some" />
-                      <Label htmlFor="show-some" className="text-sm cursor-pointer flex items-center gap-1">
-                        Titles with Some Open Access
-                        <HelpCircle className="h-3 w-3 text-gray-400" />
-                      </Label>
-                    </div>
                   </div>
                 </RadioGroup>
                 <div className="mt-3 flex items-center gap-2">
-                  <Checkbox id="active-only" />
+                  <Checkbox id="active-only" checked={activeOnly} onCheckedChange={(v) => setActiveOnly(v === true)} />
                   <Label htmlFor="active-only" className="text-sm cursor-pointer">
                     Show active titles only
                   </Label>
@@ -573,18 +674,18 @@ export default function BrowsePage() {
               <div className="border-b p-4">
                 <FilterSection title="Content Type">
                   <div className="space-y-2">
-                    {CONTENT_TYPES.map((type) => (
-                      <div key={type.id} className="flex items-center gap-2">
-                        <Checkbox
-                          id={type.id}
-                          checked={selectedTypes.has(type.id)}
-                          onCheckedChange={() => toggleContentType(type.id)}
-                        />
-                        <Label htmlFor={type.id} className="text-sm cursor-pointer">
-                          {type.label} ({journals.length})
-                        </Label>
-                      </div>
-                    ))}
+                    {typeOptions.length === 0 ? (
+                      <div className="text-sm text-gray-500">No type data</div>
+                    ) : (
+                      typeOptions.map((t) => (
+                        <div key={t} className="flex items-center gap-2">
+                          <Checkbox id={`type-${t}`} checked={selectedTypes.has(t)} onCheckedChange={() => toggleContentType(t)} />
+                          <Label htmlFor={`type-${t}`} className="text-sm cursor-pointer">
+                            {t}
+                          </Label>
+                        </div>
+                      ))
+                    )}
                   </div>
                 </FilterSection>
               </div>
@@ -593,22 +694,6 @@ export default function BrowsePage() {
               <div className="border-b p-4">
                 <FilterSection title="Year">
                   <div className="space-y-3">
-                    <RadioGroup defaultValue="range">
-                      <div className="flex items-center gap-4">
-                        <div className="flex items-center gap-2">
-                          <RadioGroupItem value="range" id="year-range" />
-                          <Label htmlFor="year-range" className="text-sm">
-                            Range
-                          </Label>
-                        </div>
-                        <div className="flex items-center gap-2">
-                          <RadioGroupItem value="single" id="year-single" />
-                          <Label htmlFor="year-single" className="text-sm">
-                            Single Year
-                          </Label>
-                        </div>
-                      </div>
-                    </RadioGroup>
                     <div className="flex items-center gap-2">
                       <Input
                         type="number"
@@ -629,11 +714,8 @@ export default function BrowsePage() {
                       />
                     </div>
                     <div className="flex gap-2">
-                      <Button variant="link" size="sm" className="h-auto p-0 text-[#006b7b]" onClick={clearFilters}>
+                      <Button variant="link" size="sm" className="h-auto p-0 text-primary" onClick={clearFilters}>
                         Clear
-                      </Button>
-                      <Button size="sm" className="h-7 bg-[#d4a84b] hover:bg-[#c49a3d]">
-                        Apply
                       </Button>
                     </div>
                   </div>
@@ -644,14 +726,18 @@ export default function BrowsePage() {
               <div className="border-b p-4">
                 <FilterSection title="Publisher" defaultOpen={false}>
                   <div className="space-y-2">
-                    {PUBLISHERS.map((pub) => (
-                      <div key={pub.id} className="flex items-center gap-2">
-                        <Checkbox id={pub.id} />
-                        <Label htmlFor={pub.id} className="text-sm cursor-pointer">
-                          {pub.label}
-                        </Label>
-                      </div>
-                    ))}
+                    {publisherOptions.length === 0 ? (
+                      <div className="text-sm text-gray-500">No publisher data</div>
+                    ) : (
+                      publisherOptions.map((p) => (
+                        <div key={p} className="flex items-center gap-2">
+                          <Checkbox id={`publisher-${p}`} checked={selectedPublishers.has(p)} onCheckedChange={() => togglePublisher(p)} />
+                          <Label htmlFor={`publisher-${p}`} className="text-sm cursor-pointer">
+                            {p}
+                          </Label>
+                        </div>
+                      ))
+                    )}
                   </div>
                 </FilterSection>
               </div>
@@ -660,14 +746,18 @@ export default function BrowsePage() {
               <div className="p-4">
                 <FilterSection title="Topic" defaultOpen={false}>
                   <div className="space-y-2">
-                    {TOPICS.map((topic) => (
-                      <div key={topic.id} className="flex items-center gap-2">
-                        <Checkbox id={topic.id} />
-                        <Label htmlFor={topic.id} className="text-sm cursor-pointer">
-                          {topic.label}
-                        </Label>
-                      </div>
-                    ))}
+                    {topicOptions.length === 0 ? (
+                      <div className="text-sm text-gray-500">No topic data</div>
+                    ) : (
+                      topicOptions.map((t) => (
+                        <div key={t} className="flex items-center gap-2">
+                          <Checkbox id={`topic-${t}`} checked={selectedTopics.has(t)} onCheckedChange={() => toggleTopic(t)} />
+                          <Label htmlFor={`topic-${t}`} className="text-sm cursor-pointer">
+                            {t}
+                          </Label>
+                        </div>
+                      ))
+                    )}
                   </div>
                 </FilterSection>
               </div>
@@ -680,7 +770,7 @@ export default function BrowsePage() {
               {paginatedJournals.length === 0 ? (
                 <div className="p-8 text-center text-gray-500">
                   <p>No journals found matching your criteria.</p>
-                  <Button variant="link" onClick={clearFilters} className="mt-2 text-[#006b7b]">
+                  <Button variant="link" onClick={clearFilters} className="mt-2 text-primary">
                     Clear all filters
                   </Button>
                 </div>
@@ -728,7 +818,7 @@ export default function BrowsePage() {
                       variant={currentPage === pageNum ? "default" : "outline"}
                       size="sm"
                       onClick={() => setCurrentPage(pageNum)}
-                      className={currentPage === pageNum ? "bg-[#006b7b]" : ""}
+                      className={currentPage === pageNum ? "bg-primary" : ""}
                     >
                       {pageNum}
                     </Button>
@@ -752,7 +842,7 @@ export default function BrowsePage() {
       <div className="border-t bg-white py-4">
         <div className="mx-auto max-w-7xl px-4">
           <div className="flex items-center gap-2 text-sm text-gray-600">
-            <Link href={ROUTES.HOME} className="text-[#006b7b] hover:underline flex items-center gap-1">
+            <Link href={ROUTES.HOME} className="text-primary hover:underline flex items-center gap-1">
               <Home className="h-4 w-4" />
               Home
             </Link>
@@ -763,7 +853,7 @@ export default function BrowsePage() {
       </div>
 
       {/* Footer */}
-      <footer className="bg-[#1a1a1a] py-8 text-white">
+      <footer className="bg-primary py-8 text-primary-foreground">
         <div className="mx-auto max-w-7xl px-4">
           <div className="grid gap-8 md:grid-cols-4">
             <div>

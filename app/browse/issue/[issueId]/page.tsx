@@ -195,6 +195,9 @@ export default function IssueBrowsePage() {
               <Link href={ROUTES.LOGIN} className="hover:underline">
                 Sign In
               </Link>
+              <Button asChild variant="outline" size="sm" className="border-white bg-transparent text-white hover:bg-white hover:text-primary">
+                <Link href={ROUTES.LOGIN}>Sign In</Link>
+              </Button>
             </div>
           </div>
         </div>
@@ -211,13 +214,6 @@ export default function IssueBrowsePage() {
               <Link href={ROUTES.ARCHIVE} className="hover:underline">
                 Archive
               </Link>
-              <Button
-                variant="outline"
-                size="sm"
-                className="border-white bg-transparent text-white hover:bg-white hover:text-primary"
-              >
-                Institutional Sign In
-              </Button>
             </nav>
           </div>
         </div>

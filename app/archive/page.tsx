@@ -1,7 +1,8 @@
 "use client"
 
 import { useEffect, useState } from "react"
-import { DashboardLayout } from "@/components/layout/dashboard-layout"
+import { Topbar } from "@/components/public/topbar"
+import { Footer } from "@/components/public/footer"
 import { apiGet } from "@/lib/api/client"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
@@ -14,6 +15,7 @@ export default function ArchivePage() {
   const [mounted, setMounted] = useState(false)
   const [issues, setIssues] = useState<Issue[]>([])
   const [journal, setJournal] = useState<{ name: string; issn?: string } | null>(null)
+  const [articlesByIssueId, setArticlesByIssueId] = useState<Record<string, number>>({})
 
   useEffect(() => {
     setMounted(true)
@@ -24,6 +26,17 @@ export default function ArchivePage() {
         if (list.length === 0) return
         const j = list[0]
         setJournal({ name: j.name, issn: j.issn })
+
+        const pubs = await apiGet<any[]>(`/api/publications?status=published`).catch(() => [])
+        const byIssue: Record<string, number> = {}
+        for (const p of Array.isArray(pubs) ? pubs : []) {
+          const issueId = p?.issueId ?? p?.issue_id ?? p?.issue?.id
+          if (!issueId) continue
+          const k = String(issueId)
+          byIssue[k] = (byIssue[k] || 0) + 1
+        }
+        setArticlesByIssueId(byIssue)
+
         const issuesResp = await apiGet<Issue[]>(`/api/issues?status=published&journalId=${encodeURIComponent(String(j.id))}`)
         setIssues(Array.isArray(issuesResp) ? issuesResp : [])
       })
@@ -34,11 +47,15 @@ export default function ArchivePage() {
 
   if (!mounted) {
     return (
-      <DashboardLayout title="Archive" subtitle="Browse past issues">
-        <div className="flex items-center justify-center py-12">
-          <div className="h-8 w-8 animate-spin rounded-full border-4 border-primary border-t-transparent" />
-        </div>
-      </DashboardLayout>
+      <div className="min-h-screen flex flex-col bg-background">
+        <Topbar />
+        <main className="flex-1">
+          <div className="flex items-center justify-center py-12">
+            <div className="h-8 w-8 animate-spin rounded-full border-4 border-primary border-t-transparent" />
+          </div>
+        </main>
+        <Footer />
+      </div>
     )
   }
 
@@ -57,8 +74,16 @@ export default function ArchivePage() {
     .sort((a, b) => b - a)
 
   return (
-    <DashboardLayout title="Archive" subtitle="Browse past issues">
-      <div className="space-y-6">
+    <div className="min-h-screen flex flex-col bg-background">
+      <Topbar />
+      <main className="flex-1">
+        <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8 py-10 sm:py-12">
+          <div className="mb-8">
+            <h1 className="text-3xl font-bold tracking-tight">Archive</h1>
+            <p className="mt-2 text-sm text-muted-foreground">Browse past issues</p>
+          </div>
+
+          <div className="space-y-6">
         {/* Journal Info */}
         {journal && (
           <Card>
@@ -104,7 +129,8 @@ export default function ArchivePage() {
                           {issue.datePublished ? format(new Date(issue.datePublished), "MMM yyyy") : "Not published"}
                         </span>
                         <span className="flex items-center gap-1">
-                          <FileText className="h-4 w-4" />0 articles
+                          <FileText className="h-4 w-4" />
+                          {articlesByIssueId[String(issue.id)] ?? 0} articles
                         </span>
                       </div>
                       <Button variant="outline" size="sm" className="w-full bg-transparent">
@@ -118,7 +144,10 @@ export default function ArchivePage() {
             </div>
           ))
         )}
-      </div>
-    </DashboardLayout>
+          </div>
+        </div>
+      </main>
+      <Footer />
+    </div>
   )
 }

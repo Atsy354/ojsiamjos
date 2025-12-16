@@ -26,7 +26,7 @@ import { Badge } from "@/components/ui/badge"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Input } from "@/components/ui/input"
 import type { Journal, Issue, Submission, Announcement } from "@/lib/types"
-import { journalService, issueService, submissionService, announcementService } from "@/lib/storage"
+import { apiGet } from "@/lib/api/client"
 
 function ErrorFallback({ error, journalId }: { error: string; journalId: string }) {
   return (
@@ -86,30 +86,61 @@ export default function JournalViewPage({ params }: { params: Promise<{ journalI
 
     const { journalId } = resolvedParams
 
-    try {
-      const foundJournal = journalService.getByIdOrPath(journalId)
-      if (foundJournal) {
-        setJournal(foundJournal)
-        // Use the journal's actual ID for related data lookup
-        const jId = foundJournal.id
-        setIssues(issueService.getByJournalId(jId))
-        setSubmissions(submissionService.getByJournalId(jId))
-        setAnnouncements(announcementService.getByJournalId(jId))
+    const run = async () => {
+      try {
+        const journals = await apiGet<any[]>("/api/journals").catch(() => [])
+        const journalsArr = Array.isArray(journals) ? journals : []
+        const foundJournal = journalsArr.find(
+          (j: any) => String(j?.path) === String(journalId) || String(j?.id) === String(journalId) || String(j?.journal_id) === String(journalId),
+        )
+
+        if (!foundJournal) {
+          setJournal(null)
+          setIssues([])
+          setSubmissions([])
+          setAnnouncements([])
+          setError(null)
+          return
+        }
+
+        const resolvedJournal = foundJournal as any
+        const jId = resolvedJournal?.id ?? resolvedJournal?.journal_id
+        setJournal(resolvedJournal)
+
+        const issuesResp = await apiGet<any[]>(`/api/issues?journalId=${jId}`).catch(() => [])
+        setIssues((Array.isArray(issuesResp) ? issuesResp : []) as any)
+
+        const subsResp = await apiGet<any[]>(`/api/submissions?journalId=${jId}`).catch(() => [])
+        setSubmissions((Array.isArray(subsResp) ? subsResp : []) as any)
+
+        // Announcements endpoint currently returns latest announcements globally.
+        // Filter by journal_id when available; otherwise show latest.
+        const annResp = await apiGet<any[]>(`/api/announcements`).catch(() => [])
+        const anns = Array.isArray(annResp) ? annResp : []
+        const filtered = anns.filter((a: any) => {
+          const aj = a?.journal_id ?? a?.journalId
+          if (!aj) return true
+          return String(aj) === String(jId)
+        })
+        setAnnouncements(filtered as any)
+
+        setError(null)
+      } catch (err) {
+        console.error("[journal] Error loading journal data:", err)
+        setError(err instanceof Error ? err.message : "Failed to load journal data")
+      } finally {
+        setLoading(false)
       }
-      setError(null)
-    } catch (err) {
-      console.error("[v0] Error loading journal data:", err)
-      setError(err instanceof Error ? err.message : "Failed to load journal data")
-    } finally {
-      setLoading(false)
     }
+
+    void run()
   }, [resolvedParams, mounted])
 
   if (!mounted || loading) {
     return (
-      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
+      <div className="min-h-screen bg-background flex items-center justify-center">
         <div className="text-center">
-          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-[#0066cc] mx-auto"></div>
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary mx-auto"></div>
           <p className="mt-4 text-gray-600">Loading journal...</p>
         </div>
       </div>
@@ -123,7 +154,7 @@ export default function JournalViewPage({ params }: { params: Promise<{ journalI
   const journalId = resolvedParams?.journalId || ""
   if (!journal) {
     return (
-      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
+      <div className="min-h-screen bg-background flex items-center justify-center">
         <Card className="max-w-md">
           <CardContent className="p-8 text-center">
             <Book className="w-16 h-16 text-gray-300 mx-auto mb-4" />
@@ -159,9 +190,9 @@ export default function JournalViewPage({ params }: { params: Promise<{ journalI
   ]
 
   return (
-    <div className="min-h-screen bg-gray-50">
+    <div className="min-h-screen bg-background">
       {/* Top Navigation */}
-      <header className="bg-[#0f2b3d] text-white">
+      <header className="bg-primary text-primary-foreground">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="flex items-center justify-between h-14">
             <div className="flex items-center gap-6">
@@ -260,7 +291,7 @@ export default function JournalViewPage({ params }: { params: Promise<{ journalI
                   <stat.icon className="w-4 h-4" />
                   <span className="text-xs">{stat.label}</span>
                 </div>
-                <div className="text-2xl font-bold text-[#0f2b3d]">{stat.value}</div>
+                <div className="text-2xl font-bold text-primary">{stat.value}</div>
               </div>
             ))}
           </div>

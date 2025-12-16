@@ -2,9 +2,9 @@ import { Skeleton } from "@/components/ui/skeleton-card"
 
 export default function BrowseLoading() {
   return (
-    <div className="min-h-screen bg-[#f5f5f5]">
+    <div className="min-h-screen bg-background">
       {/* Top Bar skeleton */}
-      <div className="bg-[#1a1a1a]">
+      <div className="bg-primary">
         <div className="mx-auto flex h-8 max-w-7xl items-center justify-between px-4">
           <Skeleton className="h-3 w-48 bg-white/20" />
           <Skeleton className="h-3 w-32 bg-white/20" />
@@ -12,7 +12,7 @@ export default function BrowseLoading() {
       </div>
 
       {/* Header skeleton */}
-      <header className="bg-[#006b7b]">
+      <header className="bg-primary">
         <div className="mx-auto max-w-7xl px-4 py-4">
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-3">
@@ -21,7 +21,7 @@ export default function BrowseLoading() {
             </div>
             <div className="flex items-center gap-2">
               <Skeleton className="h-10 w-80 rounded bg-white/20" />
-              <Skeleton className="h-10 w-10 rounded bg-[#d4a84b]/50" />
+              <Skeleton className="h-10 w-10 rounded bg-white/20" />
             </div>
           </div>
         </div>
@@ -144,7 +144,7 @@ export default function BrowseLoading() {
       </div>
 
       {/* Footer skeleton */}
-      <footer className="bg-[#1a1a1a] py-8">
+      <footer className="bg-primary py-8">
         <div className="mx-auto max-w-7xl px-4">
           <div className="grid gap-8 md:grid-cols-4">
             {Array.from({ length: 4 }).map((_, i) => (

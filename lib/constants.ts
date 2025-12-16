@@ -33,6 +33,8 @@ export const ROUTES = {
   ABOUT: "/about",
   CONTACT: "/contact",
   LOGIN: "/login",
+  REGISTER: "/register",
+  FORGOT_PASSWORD: "/forgot-password",
   HELP: "/help",
   SIGN_UP_FOR_ALERTS: "/alerts",
   TITLE_LIST: "/browse",

@@ -9,7 +9,8 @@ import { ROUTES } from "@/lib/constants"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Card } from "@/components/ui/card"
-import { AlertCircle, BookOpen, ArrowLeft, CheckCircle2, Copy } from "lucide-react"
+import DemoAccounts from "@/components/DemoAccounts"
+import { AlertCircle, BookOpen, ArrowLeft } from "lucide-react"
 
 export default function LoginPage() {
   const router = useRouter()
@@ -91,277 +92,123 @@ export default function LoginPage() {
   }
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-slate-50 to-slate-100 flex">
-      {/* Left Panel - Login Form */}
-      <div className="w-full lg:w-[480px] p-8 flex flex-col justify-center bg-white shadow-xl">
-        <div className="max-w-sm mx-auto w-full">
-          {/* Back Button */}
-          <Link
-            href="/"
-            className="inline-flex items-center gap-2 text-sm text-muted-foreground hover:text-foreground mb-8 transition-colors"
-          >
-            <ArrowLeft className="h-4 w-4" />
-            Back to Home
-          </Link>
+    <div className="min-h-screen bg-background flex">
+      {/* Left Panel */}
+      <div className="w-full lg:w-[520px] bg-white shadow-xl">
+        <div className="p-8">
+          <div className="flex items-center justify-between">
+            <Link
+              href={ROUTES.HOME}
+              className="inline-flex items-center gap-2 text-sm text-muted-foreground hover:text-foreground transition-colors"
+            >
+              <ArrowLeft className="h-4 w-4" />
+              Back to Home
+            </Link>
+            <Link href={ROUTES.REGISTER} className="text-sm text-primary hover:text-primary/90 font-medium">
+              Register
+            </Link>
+          </div>
 
-          {/* Logo */}
-          <div className="flex items-center gap-3 mb-8">
-            <div className="h-12 w-12 rounded-xl bg-[#0d4a5e] flex items-center justify-center">
+          <div className="mt-8 flex items-center gap-3">
+            <div className="h-12 w-12 rounded-xl bg-primary flex items-center justify-center">
               <BookOpen className="h-6 w-6 text-white" />
             </div>
             <div>
-              <h1 className="text-xl font-bold text-foreground">IamJOS</h1>
-              <p className="text-sm text-muted-foreground">Journal Management System</p>
+              <div className="text-lg font-bold text-foreground">IamJOS</div>
+              <div className="text-sm text-muted-foreground">Journal Management System</div>
             </div>
           </div>
 
-          {/* Welcome Text */}
-          <div className="mb-6">
-            <h2 className="text-2xl font-bold text-foreground">Welcome back</h2>
-            <p className="text-muted-foreground">Sign in to your account to continue</p>
+          <div className="mt-8">
+            <h1 className="text-2xl font-bold text-foreground">Sign In</h1>
+            <p className="mt-1 text-sm text-muted-foreground">Use your email and password to access your workspace.</p>
           </div>
 
-          {/* Login Form */}
-          <form onSubmit={handleLogin} className="space-y-4">
-            <div className="space-y-2">
-              <label htmlFor="email" className="text-sm font-medium">
-                Email Address
-              </label>
-              <Input
-                id="email"
-                type="email"
-                placeholder="Enter your email"
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
-                required
-                className="h-11"
-              />
-            </div>
-
-            <div className="space-y-2">
-              <div className="flex items-center justify-between">
-                <label htmlFor="password" className="text-sm font-medium">
-                  Password
-                </label>
-                <Link href="/forgot-password" className="text-sm text-[#0d4a5e] hover:underline">
-                  Forgot password?
-                </Link>
+          <div className="mt-6">
+            <Card className="p-6 shadow-lg border-0">
+              <div className="mb-4">
+                <h2 className="text-base font-semibold text-foreground">Sign in to your account</h2>
+                <p className="mt-1 text-sm text-muted-foreground">Enter your credentials below.</p>
               </div>
-              <Input
-                id="password"
-                type="password"
-                placeholder="Enter your password"
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-                className="h-11"
-              />
-              {/* Hint removed to avoid demo confusion */}
-            </div>
+              <form onSubmit={handleLogin} className="space-y-4">
+                <div className="space-y-2">
+                  <label htmlFor="email" className="text-sm font-medium">
+                    Email Address
+                  </label>
+                  <Input
+                    id="email"
+                    type="email"
+                    placeholder="Enter your email"
+                    value={email}
+                    onChange={(e) => setEmail(e.target.value)}
+                    required
+                    className="h-11"
+                  />
+                </div>
 
-            {error && (
-              <div className="flex items-start gap-2 p-3 bg-red-50 border border-red-200 rounded-lg text-red-700">
-                <AlertCircle className="h-5 w-5 mt-0.5 flex-shrink-0" />
-                <p className="text-sm">{error}</p>
-              </div>
-            )}
+                <div className="space-y-2">
+                  <label htmlFor="password" className="text-sm font-medium">
+                    Password
+                  </label>
+                  <Input
+                    id="password"
+                    type="password"
+                    placeholder="Enter your password"
+                    value={password}
+                    onChange={(e) => setPassword(e.target.value)}
+                    required
+                    className="h-11"
+                  />
+                </div>
 
-            <Button type="submit" className="w-full h-11 bg-[#0d4a5e] hover:bg-[#0a3d4e]" disabled={isLoading}>
-              {isLoading ? "Signing in..." : "Sign In"}
-            </Button>
-          </form>
+                <div className="flex items-center justify-between">
+                  <label className="flex items-center gap-2 text-sm text-muted-foreground">
+                    <input type="checkbox" className="h-4 w-4 rounded border-border" />
+                    Remember me
+                  </label>
+                  <Link href={ROUTES.FORGOT_PASSWORD} className="text-sm text-primary hover:underline">
+                    Forgot password?
+                  </Link>
+                </div>
 
-          {/* Demo accounts removed to avoid confusion */}
+                {error && (
+                  <div className="flex items-start gap-2 p-3 bg-red-50 border border-red-200 rounded-lg text-red-700">
+                    <AlertCircle className="h-5 w-5 mt-0.5 flex-shrink-0" />
+                    <p className="text-sm">{error}</p>
+                  </div>
+                )}
 
-          {/* Footer Links */}
-          <div className="mt-6 text-center text-sm text-muted-foreground">
-            <p>
-              Don't have an account?{" "}
-              <Link href="/register" className="text-[#0d4a5e] hover:underline font-medium">
-                Register here
-              </Link>
-            </p>
+                <Button type="submit" className="w-full h-11" disabled={isLoading}>
+                  {isLoading ? "Signing in..." : "Sign In"}
+                </Button>
+              </form>
+            </Card>
           </div>
         </div>
       </div>
 
-      {/* Right Panel - Registered Accounts Quick Reference (read-only) */}
-      <div className="hidden lg:flex flex-1 bg-slate-900 p-8 flex-col text-slate-100 overflow-y-auto">
-        <div className="max-w-2xl w-full space-y-6">
-          <div>
-            <h3 className="text-2xl font-semibold mb-2">Welcome to IamJOS</h3>
-            <p className="text-slate-300">
-              Sign in with your valid email and password. Below are example accounts that are already
-              registered in this environment (read-only quick reference).
-            </p>
-          </div>
-
-          {/* Helper: copy email into the email field */}
-          <div className="text-xs text-slate-400 -mt-3">
-            Tip: click an email to auto-fill the email field on the left.
-          </div>
-
-          {/* Platform admin */}
-          <div className="rounded-lg border border-slate-700 bg-slate-800/50 p-4">
-            <div className="flex items-center gap-2 mb-2">
-              <CheckCircle2 className="h-4 w-4 text-emerald-400" />
-              <h4 className="font-semibold">Platform Admin</h4>
-            </div>
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-sm">
-              <button type="button" onClick={() => setEmail("admin@iamjos.org")}
-                className="group flex items-center justify-between rounded-md bg-slate-900/40 hover:bg-slate-800 px-3 py-2">
-                <span className="truncate">admin@iamjos.org</span>
-                <Copy className="h-3.5 w-3.5 text-slate-400 group-hover:text-slate-200" />
-              </button>
-              <button type="button" onClick={() => setEmail("anjarbdn@gmail.com")}
-                className="group flex items-center justify-between rounded-md bg-slate-900/40 hover:bg-slate-800 px-3 py-2">
-                <span className="truncate">anjarbdn@gmail.com</span>
-                <Copy className="h-3.5 w-3.5 text-slate-400 group-hover:text-slate-200" />
-              </button>
-            </div>
-          </div>
-
-          {/* Journal Manager */}
-          <div className="rounded-lg border border-slate-700 bg-slate-800/50 p-4">
-            <div className="flex items-center gap-2 mb-2">
-              <CheckCircle2 className="h-4 w-4 text-blue-400" />
-              <h4 className="font-semibold">Journal Manager</h4>
-            </div>
-            <div className="grid grid-cols-1 sm:grid-cols-1 gap-2 text-sm">
-              <button type="button" onClick={() => setEmail("manager@ojs.test")}
-                className="group flex items-center justify-between rounded-md bg-slate-900/40 hover:bg-slate-800 px-3 py-2">
-                <span className="truncate">manager@ojs.test</span>
-                <Copy className="h-3.5 w-3.5 text-slate-400 group-hover:text-slate-200" />
-              </button>
-            </div>
-          </div>
-
-          {/* Journal accounts */}
-          <div className="grid grid-cols-1 gap-4">
-            {/* Default (journal_id = 1) */}
-            <div className="rounded-lg border border-slate-700 bg-slate-800/50 p-4">
-              <div className="flex items-center justify-between mb-2">
-                <h4 className="font-semibold">Journal: default</h4>
-                <span className="text-xs text-slate-400">path: default</span>
-              </div>
-              <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 text-sm">
-                <button type="button" onClick={() => setEmail("editor@jcst.org")}
-                  className="group flex items-center justify-between rounded-md bg-slate-900/40 hover:bg-slate-800 px-3 py-2">
-                  <span className="truncate">editor@jcst.org</span>
-                  <Copy className="h-3.5 w-3.5 text-slate-400 group-hover:text-slate-200" />
-                </button>
-                <button type="button" onClick={() => setEmail("author@jcst.org")}
-                  className="group flex items-center justify-between rounded-md bg-slate-900/40 hover:bg-slate-800 px-3 py-2">
-                  <span className="truncate">author@jcst.org</span>
-                  <Copy className="h-3.5 w-3.5 text-slate-400 group-hover:text-slate-200" />
-                </button>
-                <button type="button" onClick={() => setEmail("reviewer@jcst.org")}
-                  className="group flex items-center justify-between rounded-md bg-slate-900/40 hover:bg-slate-800 px-3 py-2">
-                  <span className="truncate">reviewer@jcst.org</span>
-                  <Copy className="h-3.5 w-3.5 text-slate-400 group-hover:text-slate-200" />
-                </button>
+      {/* Right Panel */}
+      <div className="hidden lg:flex flex-1 p-8">
+        <div className="w-full max-w-2xl mx-auto">
+          <Card className="p-6 shadow-lg border-0">
+            <div className="flex items-start justify-between gap-4">
+              <div>
+                <h2 className="text-base font-semibold text-foreground">Demo Accounts</h2>
+                <p className="mt-1 text-sm text-muted-foreground">
+                  Untuk testing, klik akun demo untuk auto-fill. Password demo: <span className="font-mono">NEWPASSWORD</span>
+                </p>
               </div>
             </div>
 
-            {/* IJMS (journal_id = 18) */}
-            <div className="rounded-lg border border-slate-700 bg-slate-800/50 p-4">
-              <div className="flex items-center justify-between mb-2">
-                <h4 className="font-semibold">Journal: ijms</h4>
-                <span className="text-xs text-slate-400">path: ijms</span>
-              </div>
-              <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 text-sm">
-                <button type="button" onClick={() => setEmail("editor@ijms.org")}
-                  className="group flex items-center justify-between rounded-md bg-slate-900/40 hover:bg-slate-800 px-3 py-2">
-                  <span className="truncate">editor@ijms.org</span>
-                  <Copy className="h-3.5 w-3.5 text-slate-400 group-hover:text-slate-200" />
-                </button>
-                <button type="button" onClick={() => setEmail("author@ijms.org")}
-                  className="group flex items-center justify-between rounded-md bg-slate-900/40 hover:bg-slate-800 px-3 py-2">
-                  <span className="truncate">author@ijms.org</span>
-                  <Copy className="h-3.5 w-3.5 text-slate-400 group-hover:text-slate-200" />
-                </button>
-                <button type="button" onClick={() => setEmail("reviewer@ijms.org")}
-                  className="group flex items-center justify-between rounded-md bg-slate-900/40 hover:bg-slate-800 px-3 py-2">
-                  <span className="truncate">reviewer@ijms.org</span>
-                  <Copy className="h-3.5 w-3.5 text-slate-400 group-hover:text-slate-200" />
-                </button>
-              </div>
+            <div className="mt-4 max-h-[540px] overflow-y-auto pr-2">
+              <DemoAccounts
+                onSelectAccount={(e, p) => {
+                  setEmail(e)
+                  setPassword(p)
+                }}
+              />
             </div>
-
-            {/* JEE (journal_id = 19) */}
-            <div className="rounded-lg border border-slate-700 bg-slate-800/50 p-4">
-              <div className="flex items-center justify-between mb-2">
-                <h4 className="font-semibold">Journal: jee</h4>
-                <span className="text-xs text-slate-400">path: jee</span>
-              </div>
-              <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 text-sm">
-                <button type="button" onClick={() => setEmail("editor@jee.org")}
-                  className="group flex items-center justify-between rounded-md bg-slate-900/40 hover:bg-slate-800 px-3 py-2">
-                  <span className="truncate">editor@jee.org</span>
-                  <Copy className="h-3.5 w-3.5 text-slate-400 group-hover:text-slate-200" />
-                </button>
-                <button type="button" onClick={() => setEmail("author@jee.org")}
-                  className="group flex items-center justify-between rounded-md bg-slate-900/40 hover:bg-slate-800 px-3 py-2">
-                  <span className="truncate">author@jee.org</span>
-                  <Copy className="h-3.5 w-3.5 text-slate-400 group-hover:text-slate-200" />
-                </button>
-                <button type="button" onClick={() => setEmail("reviewer@jee.org")}
-                  className="group flex items-center justify-between rounded-md bg-slate-900/40 hover:bg-slate-800 px-3 py-2">
-                  <span className="truncate">reviewer@jee.org</span>
-                  <Copy className="h-3.5 w-3.5 text-slate-400 group-hover:text-slate-200" />
-                </button>
-              </div>
-            </div>
-
-            {/* JBF (journal_id = 20) */}
-            <div className="rounded-lg border border-slate-700 bg-slate-800/50 p-4">
-              <div className="flex items-center justify-between mb-2">
-                <h4 className="font-semibold">Journal: jbf</h4>
-                <span className="text-xs text-slate-400">path: jbf</span>
-              </div>
-              <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 text-sm">
-                <button type="button" onClick={() => setEmail("editor@jbf.org")}
-                  className="group flex items-center justify-between rounded-md bg-slate-900/40 hover:bg-slate-800 px-3 py-2">
-                  <span className="truncate">editor@jbf.org</span>
-                  <Copy className="h-3.5 w-3.5 text-slate-400 group-hover:text-slate-200" />
-                </button>
-                <button type="button" onClick={() => setEmail("author@jbf.org")}
-                  className="group flex items-center justify-between rounded-md bg-slate-900/40 hover:bg-slate-800 px-3 py-2">
-                  <span className="truncate">author@jbf.org</span>
-                  <Copy className="h-3.5 w-3.5 text-slate-400 group-hover:text-slate-200" />
-                </button>
-                <button type="button" onClick={() => setEmail("reviewer@jbf.org")}
-                  className="group flex items-center justify-between rounded-md bg-slate-900/40 hover:bg-slate-800 px-3 py-2">
-                  <span className="truncate">reviewer@jbf.org</span>
-                  <Copy className="h-3.5 w-3.5 text-slate-400 group-hover:text-slate-200" />
-                </button>
-              </div>
-            </div>
-
-            {/* JEDU (journal_id = 21) */}
-            <div className="rounded-lg border border-slate-700 bg-slate-800/50 p-4">
-              <div className="flex items-center justify-between mb-2">
-                <h4 className="font-semibold">Journal: jedu</h4>
-                <span className="text-xs text-slate-400">path: jedu</span>
-              </div>
-              <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 text-sm">
-                <button type="button" onClick={() => setEmail("editor@jedu.org")}
-                  className="group flex items-center justify-between rounded-md bg-slate-900/40 hover:bg-slate-800 px-3 py-2">
-                  <span className="truncate">editor@jedu.org</span>
-                  <Copy className="h-3.5 w-3.5 text-slate-400 group-hover:text-slate-200" />
-                </button>
-                <button type="button" onClick={() => setEmail("author@jedu.org")}
-                  className="group flex items-center justify-between rounded-md bg-slate-900/40 hover:bg-slate-800 px-3 py-2">
-                  <span className="truncate">author@jedu.org</span>
-                  <Copy className="h-3.5 w-3.5 text-slate-400 group-hover:text-slate-200" />
-                </button>
-                <button type="button" onClick={() => setEmail("reviewer@jedu.org")}
-                  className="group flex items-center justify-between rounded-md bg-slate-900/40 hover:bg-slate-800 px-3 py-2">
-                  <span className="truncate">reviewer@jedu.org</span>
-                  <Copy className="h-3.5 w-3.5 text-slate-400 group-hover:text-slate-200" />
-                </button>
-              </div>
-            </div>
-          </div>
+          </Card>
         </div>
       </div>
     </div>

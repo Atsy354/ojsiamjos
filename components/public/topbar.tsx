@@ -61,9 +61,9 @@ export function Topbar() {
               <LogIn className="w-4 h-4" />
               <span className="hidden lg:inline">Sign In</span>
             </Button>
-            <Button size="sm" onClick={() => router.push("/login")} className="bg-accent hover:bg-accent/90 gap-2">
-              <span className="hidden sm:inline">Get Started</span>
-              <span className="sm:hidden">Start</span>
+            <Button size="sm" onClick={() => router.push("/register")} className="bg-accent hover:bg-accent/90 gap-2">
+              <span className="hidden sm:inline">Create Account</span>
+              <span className="sm:hidden">Sign Up</span>
               <ArrowRight className="w-4 h-4" />
             </Button>
           </div>
@@ -105,11 +105,11 @@ export function Topbar() {
                 size="sm"
                 className="flex-1 bg-accent hover:bg-accent/90"
                 onClick={() => {
-                  router.push("/login")
+                  router.push("/register")
                   setMobileMenuOpen(false)
                 }}
               >
-                Get Started
+                Create Account
               </Button>
             </div>
           </div>
