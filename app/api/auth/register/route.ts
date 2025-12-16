@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server"
-import { createClient } from "@/lib/supabase/server"
+import { createClient, supabaseAdmin } from "@/lib/supabase/server"
 import bcrypt from "bcryptjs"
 
 export async function POST(request: NextRequest) {
@@ -49,9 +49,10 @@ export async function POST(request: NextRequest) {
     }
 
     const supabase = await createClient()
+    const admin = supabaseAdmin
 
     // Check if user already exists
-    const { data: existingUser } = await supabase
+    const { data: existingUser } = await admin
       .from("users")
       .select("id")
       .eq("email", email)
@@ -65,7 +66,7 @@ export async function POST(request: NextRequest) {
     }
 
     if (typeof username === "string" && username.trim()) {
-      const { data: existingUsername, error: usernameCheckError } = await supabase
+      const { data: existingUsername, error: usernameCheckError } = await admin
         .from("users")
         .select("id")
         .eq("username", username.trim())
@@ -163,7 +164,7 @@ export async function POST(request: NextRequest) {
     let dbError: any = null
 
     const attemptInsert = async (payload: Record<string, any>) => {
-      return await supabase.from("users").insert(payload).select().single()
+      return await admin.from("users").insert(payload).select().single()
     }
 
     let payload = { ...baseInsert }
@@ -192,7 +193,7 @@ export async function POST(request: NextRequest) {
     if (journalId && authData.user?.id) {
       const membershipRows = requestedRoles.map((r) => ({ user_id: authData.user!.id, journal_id: journalId, role: r }))
 
-      const { error: membershipError } = await supabase.from("user_journal_roles").insert(membershipRows)
+      const { error: membershipError } = await admin.from("user_journal_roles").insert(membershipRows)
 
       // Do not fail registration if membership table isn't present yet or conflicts.
       if (membershipError) {
