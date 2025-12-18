@@ -44,7 +44,8 @@ export async function GET(request: NextRequest) {
       .select(`
         *,
         submitter:users!submissions_submitter_id_fkey(id, first_name, last_name, email),
-        section:sections(id, title)
+        section:sections(id, title),
+        authors(id, first_name, last_name, email, affiliation, primary_contact, seq)
       `)
       .order("date_submitted", { ascending: false })
       .eq("journal_id", journalId)
@@ -193,40 +194,47 @@ export async function POST(request: NextRequest) {
       console.error('[API POST /submissions] CRITICAL: Submission created but not found on re-query!')
     }
 
+    // Create publication for this submission
+    console.log('[API POST /submissions] Creating publication for submission:', submission.id)
+
+    const { data: publication, error: publicationError } = await supabase
+      .from("publications")
+      .insert({
+        submission_id: submission.id,
+        version: 1,
+        status: STATUS_QUEUED,
+        primary_locale: 'en_US',
+        seq: 0,
+      })
+      .select()
+      .single()
+
+    if (publicationError) {
+      console.error('[API POST /submissions] Publication creation error:', publicationError)
+      logger.warn('Failed to create publication', { error: publicationError.message }, { userId: authUser.id })
+    } else {
+      console.log('[API POST /submissions] Publication created:', publication.id)
+
+      // Update submission with current_publication_id
+      await supabase
+        .from("submissions")
+        .update({ current_publication_id: publication.id })
+        .eq("id", submission.id)
+    }
+
     // Save authors if provided
-    const authorsData = body.authors
-    console.log('[API POST /submissions] Authors data received:', {
-      hasAuthors: !!authorsData,
-      isArray: Array.isArray(authorsData),
-      length: authorsData?.length,
-      data: authorsData
-    })
-
+    const authorsData = body.authors;
     if (authorsData && Array.isArray(authorsData) && authorsData.length > 0) {
-      console.log('[API POST /submissions] Saving authors:', authorsData.length)
+      console.log('[API POST /submissions] Saving authors:', authorsData.length);
 
-      const authorsToInsert = authorsData.map((author: any, index: number) => ({
-        article_id: submission.id,
-        first_name: author.firstName || author.first_name,
-        last_name: author.lastName || author.last_name,
-        email: author.email,
-        affiliation: author.affiliation || null,
-        orcid: author.orcid || null,
-        primary_contact: author.isPrimary || index === 0,  // Match DB: primary_contact not is_primary
-        seq: index + 1,
-      }))
+      const { saveAuthors } = await import('@/lib/utils/authors');
+      const result = await saveAuthors(supabase, submission.id, authorsData);
 
-      const { data: savedAuthors, error: authorsError } = await supabase
-        .from('authors')
-        .insert(authorsToInsert)
-        .select()
-
-      if (authorsError) {
-        console.error('[API POST /submissions] Authors save error:', authorsError)
-        // Don't fail the whole request, just log
-        logger.warn('Failed to save authors', { error: authorsError.message }, { userId: authUser.id })
+      if (!result.success) {
+        console.error('[API POST /submissions] Authors save error:', result.error);
+        logger.warn('Failed to save authors', { error: result.error?.message }, { userId: authUser.id });
       } else {
-        console.log('[API POST /submissions] Authors saved:', savedAuthors?.length || 0)
+        console.log('[API POST /submissions] Authors saved:', result.data?.length || 0);
       }
     }
 

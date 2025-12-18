@@ -190,18 +190,19 @@ model Submission {
 }
 
 model Author {
-  id          String     @id @default(cuid())
-  submissionId String
-  submission  Submission @relation(fields: [submissionId], references: [id], onDelete: Cascade)
-  userId      String?
-  firstName   String
-  lastName    String
-  email       String
-  affiliation String?
-  orcid       String?
-  country     String?
-  isPrimary   Boolean    @default(false)
-  sequence    Int        @default(0)
+  id              String     @id @default(cuid())
+  submissionId    String
+  submission      Submission @relation(fields: [submissionId], references: [id], onDelete: Cascade)
+  userId          String?
+  firstName       String
+  lastName        String
+  email           String
+  affiliation     String?
+  orcid           String?
+  country         String?
+  isPrimary       Boolean    @default(false)
+  includeInBrowse Boolean    @default(true)
+  sequence        Int        @default(0)
 
   @@index([submissionId])
   @@map("authors")

@@ -34,7 +34,7 @@ export default function ReviewerDashboardPage() {
   const fetchAssignments = async () => {
     setIsLoading(true)
     try {
-      const response = await apiGet('/api/reviews')
+      const response = await apiGet(`/api/reviews?reviewerId=${user?.id}`)
       setAssignments(Array.isArray(response) ? response : [])
     } catch (error: any) {
       toast({

@@ -187,20 +187,24 @@ export async function POST(
                 created_at: new Date().toISOString()
             })
 
-        // 8. Audit log
-        await supabase
-            .from("workflow_audit_log")
-            .insert({
-                submission_id: submissionData?.id,
-                user_id: user?.id,
-                action: 'review_submitted',
-                metadata: {
-                    review_assignment_id: reviewAssignmentId,
-                    recommendation,
-                    quality: quality || null
-                },
-                created_at: new Date().toISOString()
-            })
+        // 8. Audit log (Safe)
+        try {
+            await supabase
+                .from("workflow_audit_log")
+                .insert({
+                    submission_id: submissionData?.id,
+                    user_id: user?.id,
+                    action: 'review_submitted',
+                    metadata: {
+                        review_assignment_id: reviewAssignmentId,
+                        recommendation,
+                        quality: quality || null
+                    },
+                    created_at: new Date().toISOString()
+                })
+        } catch (auditError) {
+            console.warn('Failed to log review submission audit:', auditError)
+        }
 
         const duration = Date.now() - startTime
         logger.apiResponse('/api/reviews/[id]/submit', 'POST', 200, duration, user?.id)
@@ -263,7 +267,7 @@ export async function GET(
         // Fallback: if error, try without review_round (might be NULL)
         if (error) {
             logger.warn('Review assignment query with review_round failed, trying without', { error: error.message, assignmentId: reviewAssignmentId })
-            
+
             const fallback = await supabase
                 .from("review_assignments")
                 .select(`
@@ -278,7 +282,7 @@ export async function GET(
         `)
                 .eq("id", reviewAssignmentId)
                 .single()
-            
+
             assignment = fallback.data
             error = fallback.error
         }

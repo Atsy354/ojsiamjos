@@ -1,0 +1,37 @@
+
+-- 2.2: Enhance review_assignments
+ALTER TABLE review_assignments
+ADD COLUMN IF NOT EXISTS review_round_id BIGINT, -- Can reference review_rounds if table exists
+ADD COLUMN IF NOT EXISTS stage_id INTEGER DEFAULT 3,
+ADD COLUMN IF NOT EXISTS review_method INTEGER DEFAULT 2,
+ADD COLUMN IF NOT EXISTS declined BOOLEAN DEFAULT FALSE,
+ADD COLUMN IF NOT EXISTS cancelled BOOLEAN DEFAULT FALSE,
+ADD COLUMN IF NOT EXISTS replaced BOOLEAN DEFAULT FALSE,
+ADD COLUMN IF NOT EXISTS date_assigned TIMESTAMP WITHOUT TIME ZONE DEFAULT NOW(),
+ADD COLUMN IF NOT EXISTS date_notified TIMESTAMP WITHOUT TIME ZONE,
+ADD COLUMN IF NOT EXISTS date_confirmed TIMESTAMP WITHOUT TIME ZONE,
+ADD COLUMN IF NOT EXISTS date_completed TIMESTAMP WITHOUT TIME ZONE,
+ADD COLUMN IF NOT EXISTS date_acknowledged TIMESTAMP WITHOUT TIME ZONE,
+ADD COLUMN IF NOT EXISTS date_due TIMESTAMP WITHOUT TIME ZONE,
+ADD COLUMN IF NOT EXISTS date_response_due TIMESTAMP WITHOUT TIME ZONE,
+ADD COLUMN IF NOT EXISTS last_modified TIMESTAMP WITHOUT TIME ZONE DEFAULT NOW(),
+ADD COLUMN IF NOT EXISTS recommendation INTEGER,
+ADD COLUMN IF NOT EXISTS review_comments TEXT,
+ADD COLUMN IF NOT EXISTS comments_for_editor TEXT,
+ADD COLUMN IF NOT EXISTS quality INTEGER,
+ADD COLUMN IF NOT EXISTS reviewer_file_id BIGINT;
+
+COMMENT ON COLUMN review_assignments.recommendation IS '1=accept, 2=revisions_required, 3=resubmit, 4=decline, 5=see_comments';
+COMMENT ON COLUMN review_assignments.review_method IS '1=double_blind, 2=blind, 3=open';
+
+-- 3. Review Rounds (if missing)
+CREATE TABLE IF NOT EXISTS review_rounds (
+  review_round_id BIGSERIAL PRIMARY KEY,
+  submission_id BIGINT REFERENCES submissions(id) ON DELETE CASCADE,
+  stage_id INTEGER NOT NULL DEFAULT 3,
+  round INTEGER NOT NULL DEFAULT 1,
+  status INTEGER DEFAULT 1,
+  date_created TIMESTAMP WITHOUT TIME ZONE DEFAULT NOW(),
+  date_modified TIMESTAMP WITHOUT TIME ZONE DEFAULT NOW(),
+  CONSTRAINT unique_submission_stage_round UNIQUE (submission_id, stage_id, round)
+);
