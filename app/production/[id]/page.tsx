@@ -71,23 +71,59 @@ export default function ProductionPage() {
     }
 
     const handleGalleyUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
-        if (!e.target.files || e.target.files.length === 0) return
+        console.log('[Production] Upload triggered', e.target.files)
+
+        if (!e.target.files || e.target.files.length === 0) {
+            console.log('[Production] No files selected')
+            return
+        }
+
+        const file = e.target.files[0]
+        console.log('[Production] File selected:', {
+            name: file.name,
+            size: file.size,
+            type: file.type
+        })
 
         setIsUploading(true)
         try {
             const formData = new FormData()
-            formData.append('file', e.target.files[0])
+            formData.append('file', file)
             formData.append('label', galleyLabel)
             formData.append('submissionId', params.id as string)
+            // OJS File Stage 10 = Production/Galley files
+            formData.append('fileStage', '10')
 
-            // Store galley file as a production-stage submission file
-            formData.append('fileStage', 'production')
-            await apiPost(`/api/submissions/${params.id}/files`, formData)
+            console.log('[Production] Uploading to:', `/api/submissions/${params.id}/files`)
+            console.log('[Production] FormData:', {
+                label: galleyLabel,
+                submissionId: params.id,
+                fileStage: '10',
+                fileName: file.name
+            })
+
+            const result = await apiPost(`/api/submissions/${params.id}/files`, formData)
+
+            console.log('[Production] Upload success:', result)
 
             toast({ title: "Success", description: `${galleyLabel} galley uploaded` })
+
+            // Reset input
+            e.target.value = ''
+
             await fetchGalleys()
         } catch (error: any) {
-            toast({ title: "Error", description: error.message, variant: "destructive" })
+            console.error('[Production] Upload error:', error)
+            console.error('[Production] Error details:', {
+                message: error.message,
+                status: error.status,
+                details: error.details
+            })
+            toast({
+                title: "Error",
+                description: error.message || "Failed to upload file",
+                variant: "destructive"
+            })
         } finally {
             setIsUploading(false)
         }
@@ -124,6 +160,46 @@ export default function ProductionPage() {
             router.push(`/publications`)
         } catch (error: any) {
             toast({ title: "Error", description: error.message, variant: "destructive" })
+        }
+    }
+
+    const handleViewGalley = async (galley: any) => {
+        try {
+            // Construct download URL
+            const downloadUrl = `/api/submissions/${params.id}/files/${galley.fileId}/download`
+
+            // Open in new tab
+            window.open(downloadUrl, '_blank')
+        } catch (error: any) {
+            toast({
+                title: "Error",
+                description: error.message || "Failed to view file",
+                variant: "destructive"
+            })
+        }
+    }
+
+    const handleDownloadGalley = async (galley: any) => {
+        try {
+            // Construct download URL
+            const downloadUrl = `/api/submissions/${params.id}/files/${galley.fileId}/download`
+
+            // Create temporary link and trigger download
+            const link = document.createElement('a')
+            link.href = downloadUrl
+            link.download = galley.filename || 'download'
+            link.target = '_blank'
+            document.body.appendChild(link)
+            link.click()
+            document.body.removeChild(link)
+
+            toast({ title: "Success", description: "Download started" })
+        } catch (error: any) {
+            toast({
+                title: "Error",
+                description: error.message || "Failed to download file",
+                variant: "destructive"
+            })
         }
     }
 
@@ -226,16 +302,27 @@ export default function ProductionPage() {
                                             </div>
                                         </div>
                                         <div className="flex gap-1">
-                                            <Button variant="ghost" size="icon">
+                                            <Button
+                                                variant="ghost"
+                                                size="icon"
+                                                onClick={() => handleViewGalley(galley)}
+                                                title="View file"
+                                            >
                                                 <Eye className="h-4 w-4" />
                                             </Button>
-                                            <Button variant="ghost" size="icon">
+                                            <Button
+                                                variant="ghost"
+                                                size="icon"
+                                                onClick={() => handleDownloadGalley(galley)}
+                                                title="Download file"
+                                            >
                                                 <Download className="h-4 w-4" />
                                             </Button>
                                             <Button
                                                 variant="ghost"
                                                 size="icon"
                                                 onClick={() => handleDeleteGalley(galley.id ?? galley.fileId)}
+                                                title="Delete file"
                                             >
                                                 <Trash2 className="h-4 w-4 text-destructive" />
                                             </Button>

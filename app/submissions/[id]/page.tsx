@@ -474,7 +474,9 @@ export default function SubmissionDetailPage() {
     : (submission as any)?.submitter_id === user?.id;
   const isRevisionRequired = status === "revision_required";
   const isCopyediting = status === "copyediting";
-  const isProduction = status === "production";
+  const isProduction = status === "production" ||
+    (submission as any)?.stage_id === 5 ||
+    (submission as any)?.stageId === 5;
 
   const displayFiles = (() => {
     if (!Array.isArray(files)) return [];
@@ -1525,7 +1527,7 @@ export default function SubmissionDetailPage() {
 
           {/* Right column - Metadata */}
           <div className="space-y-6">
-            {isEditor && (
+            {isEditor && !isProduction && (
               <Card>
                 <CardContent className="p-4">
                   <WorkflowActions
@@ -1538,6 +1540,30 @@ export default function SubmissionDetailPage() {
                       toast.success("Workflow stage updated");
                     }}
                   />
+                </CardContent>
+              </Card>
+            )}
+
+            {/* Production Workflow Button */}
+            {isProduction && (
+              <Card className="border-purple-200 bg-purple-50">
+                <CardContent className="p-4">
+                  <div className="space-y-3">
+                    <div className="flex items-center gap-2">
+                      <div className="h-2 w-2 rounded-full bg-purple-600 animate-pulse" />
+                      <h3 className="font-semibold text-purple-900">Production Stage</h3>
+                    </div>
+                    <p className="text-sm text-purple-700">
+                      This submission is ready for final production and publication.
+                    </p>
+                    <Button
+                      className="w-full bg-purple-600 hover:bg-purple-700 h-11"
+                      onClick={() => router.push(`/production/${submissionId}`)}
+                    >
+                      <FileText className="mr-2 h-4 w-4" />
+                      Go to Production Workflow
+                    </Button>
+                  </div>
                 </CardContent>
               </Card>
             )}
@@ -1640,6 +1666,8 @@ export default function SubmissionDetailPage() {
                 </div>
               </CardContent>
             </Card>
+
+
           </div>
         </div>
       </div>

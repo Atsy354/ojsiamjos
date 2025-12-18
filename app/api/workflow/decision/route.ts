@@ -55,38 +55,54 @@ export async function POST(request: NextRequest) {
       ? supabaseAdmin
       : supabase;
 
-    // COI guard: editor must not handle their own submission
-    if (user?.id) {
-      const { data: sub, error: subErr } = await supabase
-        .from("submissions")
-        .select("id, submitter_id")
-        .eq("id", submissionId)
-        .maybeSingle();
+    // CRITICAL: Validate editorial permissions and COI
+    const { data: sub, error: subErr } = await supabase
+      .from("submissions")
+      .select("id, submitter_id, stage_id, status")
+      .eq("id", submissionId)
+      .maybeSingle();
 
-      if (subErr) {
-        logger.apiError("/api/workflow/decision", "POST", subErr, user?.id);
-        return NextResponse.json({ error: subErr.message }, { status: 500 });
-      }
-
-      if (sub?.submitter_id && String(sub.submitter_id) === String(user.id)) {
-        logger.warn(
-          "Conflict of interest: editor attempted to decide on own submission",
-          {
-            submissionId,
-            submitterId: sub.submitter_id,
-          },
-          { userId: user?.id, route: "/api/workflow/decision" }
-        );
-      }
+    if (subErr) {
+      logger.apiError("/api/workflow/decision", "POST", subErr, user?.id);
+      return NextResponse.json({ error: subErr.message }, { status: 500 });
     }
+
+    if (!sub) {
+      return NextResponse.json(
+        { error: "Submission not found" },
+        { status: 404 }
+      );
+    }
+
+    // STRICT COI CHECK: Block if user is submitter
+    if (sub.submitter_id && user?.id && String(sub.submitter_id) === String(user.id)) {
+      logger.warn(
+        "Conflict of interest: editor attempted to decide on own submission",
+        {
+          submissionId,
+          submitterId: sub.submitter_id,
+          userId: user?.id,
+        },
+        { userId: user?.id, route: "/api/workflow/decision" }
+      );
+
+      return NextResponse.json(
+        {
+          error: "Conflict of interest: Cannot make decisions on your own submission",
+          errorCode: "CONFLICT_OF_INTEREST"
+        },
+        { status: 403 }
+      );
+    }
+
 
     // Normalize decision to either OJS numeric code or legacy string
     const numericDecision =
       typeof decision === "number"
         ? decision
         : typeof decision === "string"
-        ? parseInt(decision, 10)
-        : NaN;
+          ? parseInt(decision, 10)
+          : NaN;
     const isNumericDecision = Number.isFinite(numericDecision);
 
     const legacyDecision = typeof decision === "string" ? decision : null;
@@ -105,8 +121,8 @@ export async function POST(request: NextRequest) {
     const decisionCode = isNumericDecision
       ? numericDecision
       : legacyDecision
-      ? legacyToOjsMap[legacyDecision]
-      : undefined;
+        ? legacyToOjsMap[legacyDecision]
+        : undefined;
 
     if (!decisionCode) {
       return NextResponse.json({ error: "Invalid decision" }, { status: 400 });
