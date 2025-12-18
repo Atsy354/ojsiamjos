@@ -85,7 +85,7 @@ export default async function LandingPage() {
               </div>
 
               <div className="mt-7 flex flex-col gap-3 sm:flex-row">
-                <Link href="/browse" className="w-full sm:w-auto">
+                <Link href="/journal" className="w-full sm:w-auto">
                   <Button size="lg" className="w-full gap-2">
                     Browse journals
                     <ArrowRight className="h-4 w-4" />
@@ -248,7 +248,7 @@ export default async function LandingPage() {
                 Discover curated journals with clear aims, transparent editorial workflows, and discoverable research.
               </p>
             </div>
-            <Link href="/browse">
+            <Link href="/journal">
               <Button variant="outline" className="group w-full sm:w-auto bg-transparent">
                 View all journals
                 <ArrowRight className="w-4 h-4 ml-2 group-hover:translate-x-1 transition-transform" />
@@ -418,7 +418,7 @@ export default async function LandingPage() {
                   <ArrowRight className="h-4 w-4" />
                 </Button>
               </Link>
-              <Link href="/browse" className="w-full sm:w-auto">
+              <Link href="/journal" className="w-full sm:w-auto">
                 <Button
                   size="lg"
                   variant="outline"

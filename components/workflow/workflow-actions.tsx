@@ -12,7 +12,7 @@ import {
 } from "@/components/ui/dialog";
 import { Textarea } from "@/components/ui/textarea";
 import { Send, CheckCircle, XCircle, RotateCcw, Package } from "lucide-react";
-import { apiPost } from "@/lib/api/client";
+import { apiPost, apiGet } from "@/lib/api/client";
 import { useToast } from "@/hooks/use-toast";
 import { cn } from "@/lib/utils";
 
@@ -104,22 +104,42 @@ export function WorkflowActions({
     setIsSubmitting(true);
     try {
       if (selectedDecision === "send_to_review") {
+        // CRITICAL FIX: Atomic operation for Send to Review
+        // Step 1: Validate current state
+        const submission = await apiGet<any>(`/api/submissions/${submissionId}`);
+
+        if (!submission) {
+          throw new Error("Submission not found");
+        }
+
+        if (submission.stageId !== 1 && submission.stage_id !== 1) {
+          throw new Error("Submission must be in submission stage to send to review");
+        }
+
+        // Step 2: Create review round with validation
         const round = await apiPost<any>("/api/reviews/rounds", {
           submissionId,
         });
 
-        const reviewRoundId =
-          round?.review_round_id ?? round?.review_roundId ?? round?.id;
+        // CRITICAL FIX: Validate review round response
+        if (!round || (!round.id && !round.review_round_id)) {
+          throw new Error("Failed to create review round - invalid response");
+        }
 
+        const reviewRoundId = round.id || round.review_round_id;
+        const roundNumber = round.round || 1;
+
+        // Step 3: Record decision (only if round created successfully)
         await apiPost("/api/workflow/decision", {
           submissionId,
           decision: "send_to_review",
           comments: comments.trim() || undefined,
           stageId: currentStage,
           reviewRoundId,
-          round: round?.round,
+          round: roundNumber,
         });
       } else {
+        // Other decisions (accept, decline, etc.)
         await apiPost("/api/workflow/decision", {
           submissionId,
           decision: selectedDecision,
@@ -147,6 +167,7 @@ export function WorkflowActions({
         return;
       }
     } catch (error: any) {
+      console.error("[WorkflowActions] Decision failed:", error);
       toast({
         title: "Error",
         description: error.message || "Failed to record decision",
