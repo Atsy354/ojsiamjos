@@ -22,7 +22,7 @@ function JournalCard({ journal }: { journal: Journal }) {
 
     return (
         <Link
-            href={`/browse/journal/${journal.path || journal.id}`}
+            href={`/journal/${journal.path || journal.id}`}
             className="group block rounded-xl border bg-card p-4 sm:p-6 hover:shadow-lg hover:border-primary/30 transition-all duration-300 relative overflow-hidden"
         >
             <div className="pointer-events-none absolute inset-x-0 top-0 h-1 bg-gradient-to-r from-primary to-accent opacity-0 group-hover:opacity-100 transition-opacity" />
