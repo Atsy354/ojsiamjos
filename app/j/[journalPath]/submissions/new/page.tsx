@@ -77,10 +77,10 @@ export default function PublicSubmissionPage() {
         // Fetch journals
         const journals = await apiGet<any[]>("/api/journals")
         const foundJournal = journals.find((j) => j.path === journalPath || j.id === journalPath)
-        
+
         if (foundJournal) {
           setJournal(foundJournal)
-          
+
           // Fetch sections for this journal
           const sectionsData = await apiGet<any[]>(`/api/sections?journalId=${foundJournal.journal_id || foundJournal.id}`)
           setSections(sectionsData || [])
@@ -209,7 +209,7 @@ export default function PublicSubmissionPage() {
             <AlertCircle className="w-16 h-16 text-destructive mx-auto mb-4" />
             <h2 className="text-xl font-semibold mb-2">Journal Not Found</h2>
             <p className="text-muted-foreground mb-6">The journal could not be found.</p>
-            <Link href="/browse">
+            <Link href="/journal">
               <Button className="w-full">Browse Journals</Button>
             </Link>
           </CardContent>
@@ -284,20 +284,18 @@ export default function PublicSubmissionPage() {
             {STEPS.map((step, index) => (
               <div key={step.id} className="flex items-center">
                 <div
-                  className={`flex items-center justify-center w-10 h-10 rounded-full border-2 ${
-                    currentStep > step.id
+                  className={`flex items-center justify-center w-10 h-10 rounded-full border-2 ${currentStep > step.id
                       ? "bg-green-500 border-green-500 text-white"
                       : currentStep === step.id
                         ? "bg-[#006798] border-[#006798] text-white"
                         : "border-gray-300 text-gray-400"
-                  }`}
+                    }`}
                 >
                   {currentStep > step.id ? <Check className="w-5 h-5" /> : <step.icon className="w-5 h-5" />}
                 </div>
                 <span
-                  className={`ml-2 text-sm font-medium ${
-                    currentStep >= step.id ? "text-foreground" : "text-muted-foreground"
-                  }`}
+                  className={`ml-2 text-sm font-medium ${currentStep >= step.id ? "text-foreground" : "text-muted-foreground"
+                    }`}
                 >
                   {step.name}
                 </span>

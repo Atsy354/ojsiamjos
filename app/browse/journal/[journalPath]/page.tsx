@@ -86,7 +86,7 @@ export default function JournalDetailPage() {
           <h1 className="mb-2 text-2xl font-bold text-gray-900">Journal Not Found</h1>
           <p className="mb-4 text-gray-500">The journal you're looking for doesn't exist.</p>
           <Button asChild>
-            <Link href="/browse">Browse Journals</Link>
+            <Link href="/journal">Browse Journals</Link>
           </Button>
         </div>
       </div>
@@ -104,7 +104,7 @@ export default function JournalDetailPage() {
                 Home
               </Link>
               <span className="text-white/50">|</span>
-              <Link href="/browse" className="hover:underline">
+              <Link href="/journal" className="hover:underline">
                 Browse
               </Link>
             </div>
@@ -143,7 +143,7 @@ export default function JournalDetailPage() {
             <Home className="h-4 w-4" />
           </Link>
           <ChevronRight className="h-4 w-4 text-gray-400" />
-          <Link href="/browse" className="text-primary hover:underline">
+          <Link href="/journal" className="text-primary hover:underline">
             Journals
           </Link>
           <ChevronRight className="h-4 w-4 text-gray-400" />
@@ -200,11 +200,10 @@ export default function JournalDetailPage() {
               <button
                 key={tab.id}
                 onClick={() => setActiveTab(tab.id as typeof activeTab)}
-                className={`border-b-2 px-2 py-4 text-sm font-medium transition-colors ${
-                  activeTab === tab.id
+                className={`border-b-2 px-2 py-4 text-sm font-medium transition-colors ${activeTab === tab.id
                     ? "border-primary text-primary"
                     : "border-transparent text-gray-500 hover:text-gray-700"
-                }`}
+                  }`}
               >
                 {tab.label}
               </button>

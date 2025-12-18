@@ -141,7 +141,7 @@ export default function ArticleDetailPage() {
           <h1 className="mb-2 text-2xl font-bold text-gray-900">Article Not Found</h1>
           <p className="mb-4 text-gray-500">The article you're looking for doesn't exist or has been removed.</p>
           <Button asChild>
-            <Link href="/browse">Browse Articles</Link>
+            <Link href="/journal">Browse Articles</Link>
           </Button>
         </div>
       </div>
@@ -360,11 +360,10 @@ export default function ArticleDetailPage() {
                   <button
                     key={section.id}
                     onClick={() => scrollToSection(section.id)}
-                    className={`block w-full rounded px-3 py-2 text-left text-sm transition-colors ${
-                      activeSection === section.id
+                    className={`block w-full rounded px-3 py-2 text-left text-sm transition-colors ${activeSection === section.id
                         ? "border-l-4 border-primary bg-gray-50 font-medium text-primary"
                         : "text-gray-600 hover:bg-gray-50"
-                    }`}
+                      }`}
                   >
                     {section.label}
                   </button>
@@ -435,10 +434,10 @@ export default function ArticleDetailPage() {
                   <span>
                     {article.dateSubmitted
                       ? new Date(article.dateSubmitted).toLocaleDateString("en-US", {
-                          day: "numeric",
-                          month: "long",
-                          year: "numeric",
-                        })
+                        day: "numeric",
+                        month: "long",
+                        year: "numeric",
+                      })
                       : "N/A"}
                   </span>
                 </div>
@@ -697,7 +696,7 @@ export default function ArticleDetailPage() {
               <h3 className="mb-4 font-bold">Resources</h3>
               <ul className="space-y-2 text-sm text-gray-400">
                 <li>
-                  <Link href="/browse" className="hover:text-white">
+                  <Link href="/journal" className="hover:text-white">
                     Browse Journals
                   </Link>
                 </li>

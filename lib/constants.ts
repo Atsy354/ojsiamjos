@@ -29,7 +29,7 @@ export const STORAGE_KEYS = {
 export const ROUTES = {
   // Public routes
   HOME: "/",
-  BROWSE: "/browse",
+  BROWSE: "/journal",
   ABOUT: "/about",
   CONTACT: "/contact",
   LOGIN: "/login",
@@ -37,7 +37,7 @@ export const ROUTES = {
   FORGOT_PASSWORD: "/forgot-password",
   HELP: "/help",
   SIGN_UP_FOR_ALERTS: "/alerts",
-  TITLE_LIST: "/browse",
+  TITLE_LIST: "/journal",
   AUTHOR_GUIDELINES: "/author-guidelines",
   TRACK_SUBMISSION: "/my-submissions",
   AUTHOR_RESOURCES: "/author-resources",

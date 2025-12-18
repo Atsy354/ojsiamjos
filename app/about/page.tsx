@@ -199,7 +199,7 @@ export default async function AboutPage() {
                   IamJOS has been adopted by universities, research institutes, and scholarly societies across the globe
                   for its reliability, flexibility, and commitment to open access principles.
                 </p>
-                <Link href="/browse">
+                <Link href="/journal">
                   <Button className="w-full bg-accent hover:bg-accent/90 gap-2">
                     Explore Journals
                     <ArrowRight className="w-4 h-4" />
