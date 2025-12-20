@@ -1,80 +1,63 @@
 "use client"
 
+import React from "react"
 import { Button } from "@/components/ui/button"
-import { Card, CardContent } from "@/components/ui/card"
-import { Alert, AlertDescription } from "@/components/ui/alert"
-import { CheckCircle, Loader2 } from "lucide-react"
+import Link from "next/link"
 
-export function WizardStep5Finish({ data, onChange, onFinish, errors }: any) {
-    const [isSubmitting, setIsSubmitting] = React.useState(false)
-
-    const handleFinish = async () => {
-        setIsSubmitting(true)
-        try {
-            await onFinish()
-        } finally {
-            setIsSubmitting(false)
-        }
-    }
-
+export function WizardStep5Finish({ submissionId }: any) {
     return (
-        <div className="space-y-6">
-            <Alert className="bg-green-50 border-green-200">
-                <CheckCircle className="h-4 w-4 text-green-600" />
-                <AlertDescription className="text-green-800">
-                    You're almost done! Click "Complete Submission" to finalize your manuscript submission.
-                </AlertDescription>
-            </Alert>
+        <div className="space-y-6 max-w-3xl">
+            {/* Submission Complete Heading */}
+            <div>
+                <h1 className="text-2xl font-bold mb-4">Submission complete</h1>
+            </div>
 
-            <Card><CardContent className="pt-6 space-y-4">
-                <h3 className="font-semibold text-lg">What happens next?</h3>
+            {/* Thank You Message */}
+            <div>
+                <p className="text-base text-muted-foreground">
+                    Thank you for your interest in publishing with iamJOS Journal.
+                </p>
+            </div>
 
-                <div className="space-y-3 text-sm">
-                    <div className="flex gap-3">
-                        <div className="flex-shrink-0 w-8 h-8 rounded-full bg-primary/10 flex items-center justify-center text-primary font-semibold">1</div>
-                        <div>
-                            <p className="font-medium">Editorial Review</p>
-                            <p className="text-muted-foreground">Your submission will be reviewed by the editor to ensure it meets the journal's scope and standards.</p>
-                        </div>
-                    </div>
+            {/* What Happens Next */}
+            <div className="space-y-4">
+                <h2 className="text-xl font-semibold">What Happens Next?</h2>
+                <p className="text-sm text-muted-foreground leading-relaxed">
+                    The journal has been notified of your submission, and you've been emailed a confirmation for your records.
+                    Once the editor has reviewed the submission, they will contact you.
+                </p>
+            </div>
 
-                    <div className="flex gap-3">
-                        <div className="flex-shrink-0 w-8 h-8 rounded-full bg-primary/10 flex items-center justify-center text-primary font-semibold">2</div>
-                        <div>
-                            <p className="font-medium">Peer Review</p>
-                            <p className="text-muted-foreground">If accepted, your article will be sent to expert reviewers for evaluation.</p>
-                        </div>
-                    </div>
-
-                    <div className="flex gap-3">
-                        <div className="flex-shrink-0 w-8 h-8 rounded-full bg-primary/10 flex items-center justify-center text-primary font-semibold">3</div>
-                        <div>
-                            <p className="font-medium">Decision</p>
-                            <p className="text-muted-foreground">You will be notified of the editorial decision and any required revisions.</p>
-                        </div>
-                    </div>
-
-                    <div className="flex gap-3">
-                        <div className="flex-shrink-0 w-8 h-8 rounded-full bg-primary/10 flex items-center justify-center text-primary font-semibold">4</div>
-                        <div>
-                            <p className="font-medium">Publication</p>
-                            <p className="text-muted-foreground">After acceptance and final preparation, your article will be published.</p>
-                        </div>
-                    </div>
-                </div>
-
-                <Alert className="mt-6">
-                    <AlertDescription>
-                        <strong>Important:</strong> You will receive email notifications at each stage.
-                        You can also check your submission status anytime in the dashboard.
-                    </AlertDescription>
-                </Alert>
-            </CardContent></Card>
-
-            {errors && <Alert variant="destructive"><AlertDescription>{errors}</AlertDescription></Alert>}
+            {/* For now, you can */}
+            <div className="space-y-3">
+                <p className="text-sm font-medium">For now, you can:</p>
+                <ul className="space-y-2 ml-6">
+                    <li className="text-sm">
+                        <Link
+                            href={`/submissions/${submissionId}`}
+                            className="text-primary hover:underline"
+                        >
+                            Review this submission
+                        </Link>
+                    </li>
+                    <li className="text-sm">
+                        <Link
+                            href="/submissions/new/wizard"
+                            className="text-primary hover:underline"
+                        >
+                            Create a new submission
+                        </Link>
+                    </li>
+                    <li className="text-sm">
+                        <Link
+                            href="/my-submissions"
+                            className="text-primary hover:underline"
+                        >
+                            Return to your dashboard
+                        </Link>
+                    </li>
+                </ul>
+            </div>
         </div>
     )
 }
-
-// Add React import
-import React from "react"

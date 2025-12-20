@@ -11,10 +11,12 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Alert, AlertDescription } from "@/components/ui/alert"
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group"
 import { Separator } from "@/components/ui/separator"
-import { Loader2, FileText, Send, AlertCircle, Download } from "lucide-react"
+import { Badge } from "@/components/ui/badge"
+import { Loader2, FileText, Send, AlertCircle, Download, Calendar, User } from "lucide-react"
 import { apiGet, apiPost } from "@/lib/api/client"
 import { useToast } from "@/hooks/use-toast"
 import { ReviewRecommendation, REVIEW_RECOMMENDATION_LABELS } from "@/lib/types/workflow"
+import { format } from "date-fns"
 
 export default function SubmitReviewPage() {
     const params = useParams()
@@ -80,6 +82,15 @@ export default function SubmitReviewPage() {
             return
         }
 
+        if (reviewComments.trim().length < 50) {
+            toast({
+                title: "Validation Error",
+                description: "Review comments should be at least 50 characters",
+                variant: "destructive"
+            })
+            return
+        }
+
         setIsSubmitting(true)
         try {
             await apiPost(`/api/reviews/${params.id}/submit`, {
@@ -106,11 +117,18 @@ export default function SubmitReviewPage() {
         }
     }
 
+    const formatFileSize = (bytes: number) => {
+        if (!bytes) return 'Unknown size'
+        const kb = bytes / 1024
+        if (kb < 1024) return `${kb.toFixed(1)} KB`
+        return `${(kb / 1024).toFixed(1)} MB`
+    }
+
     if (isLoading) {
         return (
             <DashboardLayout title="Submit Review" subtitle="Loading...">
                 <div className="flex items-center justify-center py-12">
-                    <Loader2 className="h-8 w-8 animate-spin" />
+                    <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
                 </div>
             </DashboardLayout>
         )
@@ -129,6 +147,7 @@ export default function SubmitReviewPage() {
 
     const submission = assignment.submission || {}
     const submitter = submission.submitter || {}
+    const isOverdue = assignment.dateDue && new Date(assignment.dateDue) < new Date()
 
     return (
         <DashboardLayout
@@ -136,47 +155,73 @@ export default function SubmitReviewPage() {
             subtitle={`Review Assignment #${assignment.id}`}
         >
             <div className="space-y-6">
+                {/* Due Date Warning */}
+                {isOverdue && (
+                    <Alert variant="destructive">
+                        <AlertCircle className="h-4 w-4" />
+                        <AlertDescription>
+                            This review was due on {format(new Date(assignment.dateDue), 'MMMM d, yyyy')}. Please submit your review as soon as possible.
+                        </AlertDescription>
+                    </Alert>
+                )}
+
                 {/* Submission Info */}
                 <Card>
                     <CardHeader>
-                        <CardTitle>Submission Information</CardTitle>
-                        <CardDescription>Manuscript details</CardDescription>
+                        <CardTitle className="flex items-center gap-2">
+                            <FileText className="h-5 w-5" />
+                            Submission Information
+                        </CardTitle>
+                        <CardDescription>Review the manuscript details before submitting your assessment</CardDescription>
                     </CardHeader>
-                    <CardContent className="space-y-3">
-                        <div>
-                            <Label className="text-muted-foreground">Title</Label>
-                            <p className="font-medium">{submission.title || 'Untitled Submission'}</p>
+                    <CardContent className="space-y-4">
+                        <div className="space-y-2">
+                            <Label className="text-sm font-medium text-muted-foreground">Title</Label>
+                            <p className="text-base font-semibold leading-tight">{submission.title || 'Untitled Submission'}</p>
                         </div>
 
                         {submission.abstract && (
-                            <div>
-                                <Label className="text-muted-foreground">Abstract</Label>
-                                <p className="text-sm line-clamp-4">{submission.abstract}</p>
-                            </div>
-                        )}
-
-                        {submitter.firstName && (
-                            <div>
-                                <Label className="text-muted-foreground">Author</Label>
-                                <p className="text-sm">{submitter.firstName} {submitter.lastName}</p>
-                            </div>
-                        )}
-
-                        {assignment.dateDue && (
-                            <div>
-                                <Label className="text-muted-foreground">Review Due Date</Label>
-                                <p className="text-sm">{new Date(assignment.dateDue).toLocaleDateString()}</p>
+                            <div className="space-y-2">
+                                <Label className="text-sm font-medium text-muted-foreground">Abstract</Label>
+                                <p className="text-sm leading-relaxed">{submission.abstract}</p>
                             </div>
                         )}
 
                         <Separator />
 
-                        <div>
-                            <Label className="text-muted-foreground">Manuscript Files</Label>
+                        <div className="grid gap-4 sm:grid-cols-2">
+                            {submitter.firstName && (
+                                <div className="space-y-1">
+                                    <Label className="text-sm font-medium text-muted-foreground flex items-center gap-1">
+                                        <User className="h-3.5 w-3.5" />
+                                        Author
+                                    </Label>
+                                    <p className="text-sm">{submitter.firstName} {submitter.lastName}</p>
+                                </div>
+                            )}
+
+                            {assignment.dateDue && (
+                                <div className="space-y-1">
+                                    <Label className="text-sm font-medium text-muted-foreground flex items-center gap-1">
+                                        <Calendar className="h-3.5 w-3.5" />
+                                        Review Due Date
+                                    </Label>
+                                    <p className={`text-sm ${isOverdue ? 'text-red-600 font-medium' : ''}`}>
+                                        {format(new Date(assignment.dateDue), 'MMMM d, yyyy')}
+                                        {isOverdue && ' (Overdue)'}
+                                    </p>
+                                </div>
+                            )}
+                        </div>
+
+                        <Separator />
+
+                        <div className="space-y-3">
+                            <Label className="text-sm font-medium text-muted-foreground">Manuscript Files</Label>
                             {files.length === 0 ? (
                                 <p className="text-sm text-muted-foreground">No files available.</p>
                             ) : (
-                                <div className="space-y-2 mt-2">
+                                <div className="space-y-2">
                                     {files.map((f: any) => {
                                         const fileId = f.fileId ?? f.file_id ?? f.id
                                         const submissionId = submission?.id
@@ -190,16 +235,25 @@ export default function SubmitReviewPage() {
                                             || f.file_name
                                             || 'File'
 
+                                        const fileSize = f.fileSize || f.file_size
+
                                         return (
                                             <Button
                                                 key={String(fileId ?? f.file_path ?? Math.random())}
                                                 asChild
                                                 variant="outline"
-                                                className="w-full justify-start"
+                                                className="w-full justify-between h-auto py-3"
                                             >
                                                 <a href={downloadHref} target="_blank" rel="noreferrer">
-                                                    <Download className="mr-2 h-4 w-4" />
-                                                    {fileLabel}
+                                                    <span className="flex items-center gap-2">
+                                                        <Download className="h-4 w-4 flex-shrink-0" />
+                                                        <span className="text-left truncate">{fileLabel}</span>
+                                                    </span>
+                                                    {fileSize && (
+                                                        <Badge variant="secondary" className="ml-2">
+                                                            {formatFileSize(fileSize)}
+                                                        </Badge>
+                                                    )}
                                                 </a>
                                             </Button>
                                         )
@@ -213,15 +267,20 @@ export default function SubmitReviewPage() {
                 {/* Review Form */}
                 <Card>
                     <CardHeader>
-                        <CardTitle>Your Review</CardTitle>
+                        <CardTitle className="flex items-center gap-2">
+                            <Send className="h-5 w-5" />
+                            Your Review
+                        </CardTitle>
                         <CardDescription>Please provide your assessment and recommendation</CardDescription>
                     </CardHeader>
                     <CardContent className="space-y-6">
                         {/* Recommendation */}
                         <div className="space-y-3">
-                            <Label htmlFor="recommendation">Recommendation *</Label>
+                            <Label htmlFor="recommendation" className="text-base font-medium">
+                                Recommendation <span className="text-red-500">*</span>
+                            </Label>
                             <Select value={recommendation} onValueChange={setRecommendation}>
-                                <SelectTrigger id="recommendation">
+                                <SelectTrigger id="recommendation" className="h-11">
                                     <SelectValue placeholder="Select your recommendation" />
                                 </SelectTrigger>
                                 <SelectContent>
@@ -242,23 +301,34 @@ export default function SubmitReviewPage() {
                                     </SelectItem>
                                 </SelectContent>
                             </Select>
+                            <p className="text-xs text-muted-foreground">
+                                Select the recommendation that best reflects your assessment of this manuscript.
+                            </p>
                         </div>
 
                         <Separator />
 
                         {/* Review Comments */}
                         <div className="space-y-3">
-                            <Label htmlFor="reviewComments">Review Comments for Authors *</Label>
+                            <div className="flex items-center justify-between">
+                                <Label htmlFor="reviewComments" className="text-base font-medium">
+                                    Review Comments for Authors <span className="text-red-500">*</span>
+                                </Label>
+                                <span className={`text-xs ${reviewComments.length < 50 ? 'text-muted-foreground' : reviewComments.length > 5000 ? 'text-red-600' : 'text-green-600'}`}>
+                                    {reviewComments.length} / 5000 characters {reviewComments.length < 50 && '(min. 50)'}
+                                </span>
+                            </div>
                             <Textarea
                                 id="reviewComments"
-                                placeholder="Provide detailed feedback for the authors. This will be shared with them."
+                                placeholder="Provide detailed, constructive feedback for the authors. Include specific comments on methodology, results, writing quality, and suggestions for improvement."
                                 value={reviewComments}
                                 onChange={(e) => setReviewComments(e.target.value)}
-                                rows={10}
-                                className="font-mono text-sm"
+                                rows={12}
+                                maxLength={5000}
+                                className="resize-none"
                             />
                             <p className="text-xs text-muted-foreground">
-                                These comments will be shared with the author. Please provide constructive feedback.
+                                These comments will be shared with the author. Please provide constructive and professional feedback.
                             </p>
                         </div>
 
@@ -266,17 +336,25 @@ export default function SubmitReviewPage() {
 
                         {/* Comments for Editor */}
                         <div className="space-y-3">
-                            <Label htmlFor="editorComments">Confidential Comments for Editor (Optional)</Label>
+                            <div className="flex items-center justify-between">
+                                <Label htmlFor="editorComments" className="text-base font-medium">
+                                    Confidential Comments for Editor <span className="text-muted-foreground text-sm font-normal">(Optional)</span>
+                                </Label>
+                                <span className="text-xs text-muted-foreground">
+                                    {commentsForEditor.length} / 2000 characters
+                                </span>
+                            </div>
                             <Textarea
                                 id="editorComments"
-                                placeholder="Any additional comments for the editor only (not shared with authors)"
+                                placeholder="Any additional comments for the editor only (e.g., concerns about methodology, ethical issues, or publication recommendations)"
                                 value={commentsForEditor}
                                 onChange={(e) => setCommentsForEditor(e.target.value)}
-                                rows={5}
-                                className="font-mono text-sm"
+                                rows={6}
+                                maxLength={2000}
+                                className="resize-none"
                             />
                             <p className="text-xs text-muted-foreground">
-                                These comments are  confidential and will not be shared with the author.
+                                These comments are confidential and will not be shared with the author.
                             </p>
                         </div>
 
@@ -284,27 +362,29 @@ export default function SubmitReviewPage() {
 
                         {/* Quality Rating */}
                         <div className="space-y-3">
-                            <Label>Manuscript Quality (Optional)</Label>
-                            <RadioGroup value={quality} onValueChange={setQuality}>
-                                <div className="flex items-center space-x-2">
+                            <Label className="text-base font-medium">
+                                Manuscript Quality <span className="text-muted-foreground text-sm font-normal">(Optional)</span>
+                            </Label>
+                            <RadioGroup value={quality} onValueChange={setQuality} className="space-y-3">
+                                <div className="flex items-center space-x-3 rounded-lg border p-3 hover:bg-accent/50 transition-colors">
                                     <RadioGroupItem value="5" id="q5" />
-                                    <Label htmlFor="q5" className="cursor-pointer font-normal">5 - Excellent</Label>
+                                    <Label htmlFor="q5" className="cursor-pointer font-normal flex-1">5 - Excellent</Label>
                                 </div>
-                                <div className="flex items-center space-x-2">
+                                <div className="flex items-center space-x-3 rounded-lg border p-3 hover:bg-accent/50 transition-colors">
                                     <RadioGroupItem value="4" id="q4" />
-                                    <Label htmlFor="q4" className="cursor-pointer font-normal">4 - Good</Label>
+                                    <Label htmlFor="q4" className="cursor-pointer font-normal flex-1">4 - Good</Label>
                                 </div>
-                                <div className="flex items-center space-x-2">
+                                <div className="flex items-center space-x-3 rounded-lg border p-3 hover:bg-accent/50 transition-colors">
                                     <RadioGroupItem value="3" id="q3" />
-                                    <Label htmlFor="q3" className="cursor-pointer font-normal">3 - Average</Label>
+                                    <Label htmlFor="q3" className="cursor-pointer font-normal flex-1">3 - Average</Label>
                                 </div>
-                                <div className="flex items-center space-x-2">
+                                <div className="flex items-center space-x-3 rounded-lg border p-3 hover:bg-accent/50 transition-colors">
                                     <RadioGroupItem value="2" id="q2" />
-                                    <Label htmlFor="q2" className="cursor-pointer font-normal">2 - Below Average</Label>
+                                    <Label htmlFor="q2" className="cursor-pointer font-normal flex-1">2 - Below Average</Label>
                                 </div>
-                                <div className="flex items-center space-x-2">
+                                <div className="flex items-center space-x-3 rounded-lg border p-3 hover:bg-accent/50 transition-colors">
                                     <RadioGroupItem value="1" id="q1" />
-                                    <Label htmlFor="q1" className="cursor-pointer font-normal">1 - Poor</Label>
+                                    <Label htmlFor="q1" className="cursor-pointer font-normal flex-1">1 - Poor</Label>
                                 </div>
                             </RadioGroup>
                         </div>
@@ -312,11 +392,15 @@ export default function SubmitReviewPage() {
                 </Card>
 
                 {/* Actions */}
-                <div className="flex justify-between">
-                    <Button variant="outline" onClick={() => router.push('/reviews')}>
+                <div className="flex justify-between items-center pt-2">
+                    <Button variant="outline" onClick={() => router.push('/reviews')} size="lg">
                         Cancel
                     </Button>
-                    <Button onClick={handleSubmit} disabled={isSubmitting}>
+                    <Button
+                        onClick={handleSubmit}
+                        disabled={isSubmitting || !recommendation || !reviewComments.trim() || reviewComments.length < 50}
+                        size="lg"
+                    >
                         {isSubmitting ? (
                             <>
                                 <Loader2 className="mr-2 h-4 w-4 animate-spin" />

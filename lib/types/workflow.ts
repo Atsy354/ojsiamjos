@@ -372,9 +372,17 @@ export interface WizardStep1Data {
     sectionId: number
     submissionLanguage: string
     commentsForEditor?: string
-    submissionRequirements: boolean
+    // Individual submission requirements (OJS 3.3 standard)
+    requirement1: boolean  // Not previously published
+    requirement2: boolean  // File format (OpenOffice, Word, RTF)
+    requirement3: boolean  // URLs for references
+    requirement4: boolean  // Text formatting (single-spaced, 12-point, etc.)
+    requirement5: boolean  // Adheres to Author Guidelines
+    // Copyright and privacy
     copyrightNotice: boolean
     privacyStatement: boolean
+    // Legacy field for backward compatibility
+    submissionRequirements?: boolean
 }
 
 /**

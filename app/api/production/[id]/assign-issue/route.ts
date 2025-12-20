@@ -1,22 +1,12 @@
 import { NextRequest, NextResponse } from "next/server"
 import { createClient } from "@/lib/supabase/server"
-import { requireEditor } from "@/lib/middleware/auth"
+import { withEditor, errorResponse } from "@/lib/api/middleware"
 import { logger } from "@/lib/utils/logger"
 
-export async function POST(
-    request: NextRequest,
-    { params }: { params: { id: string } }
-) {
+export const POST = withEditor(async (request, { params }, { user }) => {
     const startTime = Date.now()
 
     try {
-        // Check authorization - must be Manager or Editor
-        const { authorized, user, error: authError } = await requireEditor(request)
-        if (!authorized) {
-            logger.apiError('/api/production/[id]/assign-issue', 'POST', authError)
-            return NextResponse.json({ error: authError || 'Unauthorized' }, { status: 403 })
-        }
-
         logger.apiRequest('/api/production/[id]/assign-issue', 'POST', user?.id)
 
         const submissionId = params.id
@@ -25,10 +15,7 @@ export async function POST(
 
         // Validate required fields
         if (!issueId) {
-            return NextResponse.json(
-                { error: "Issue ID is required" },
-                { status: 400 }
-            )
+            return errorResponse("Issue ID is required", 400)
         }
 
         const supabase = await createClient()
@@ -49,7 +36,7 @@ export async function POST(
 
         if (dbError) {
             logger.apiError('/api/production/[id]/assign-issue', 'POST', dbError, user?.id)
-            return NextResponse.json({ error: dbError.message }, { status: 500 })
+            return errorResponse(dbError.message, 500)
         }
 
         const duration = Date.now() - startTime
@@ -62,6 +49,6 @@ export async function POST(
         return NextResponse.json(schedule)
     } catch (error) {
         logger.apiError('/api/production/[id]/assign-issue', 'POST', error)
-        return NextResponse.json({ error: "Internal server error" }, { status: 500 })
+        return errorResponse("Internal server error", 500)
     }
-}
+})

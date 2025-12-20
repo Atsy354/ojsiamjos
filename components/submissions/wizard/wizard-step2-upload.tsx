@@ -1,11 +1,14 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
+import { Label } from "@/components/ui/label";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { FileText, Upload, X, CheckCircle2, AlertCircle } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
+import { apiGet } from "@/lib/api/client";
 
 export function WizardStep2Upload({
   data,
@@ -15,9 +18,23 @@ export function WizardStep2Upload({
 }: any) {
   const { toast } = useToast();
   const [uploading, setUploading] = useState(false);
+  const [sections, setSections] = useState<any[]>([]);
   void submissionId;
 
   const files: File[] = Array.isArray(data?.files) ? data.files : [];
+
+  useEffect(() => {
+    fetchSections();
+  }, []);
+
+  const fetchSections = async () => {
+    try {
+      const response = await apiGet('/api/sections');
+      setSections(response || []);
+    } catch (error) {
+      console.error('Failed to load sections:', error);
+    }
+  };
 
   const handleFileSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
     if (!e.target.files) return;
@@ -26,7 +43,7 @@ export function WizardStep2Upload({
     try {
       const selected = Array.from(e.target.files);
       const nextFiles = [...files, ...selected];
-      onChange({ files: nextFiles });
+      onChange({ ...data, files: nextFiles });
 
       toast({ title: "Success", description: "Files selected" });
     } catch (error: any) {
@@ -42,8 +59,46 @@ export function WizardStep2Upload({
     }
   };
 
+  const handleSectionChange = (sectionId: string) => {
+    onChange({ ...data, sectionId: parseInt(sectionId) });
+  };
+
   return (
     <div className="space-y-6">
+      {/* Section Selection */}
+      <Card>
+        <CardContent className="pt-6 space-y-4">
+          <div className="space-y-2">
+            <Label htmlFor="section" className="text-base font-semibold">
+              Select Section *
+            </Label>
+            <p className="text-sm text-muted-foreground">
+              Choose the section that best fits your submission
+            </p>
+            <Select
+              value={String(data?.sectionId || '')}
+              onValueChange={handleSectionChange}
+            >
+              <SelectTrigger id="section" className="w-full">
+                <SelectValue placeholder="Choose a section for your submission" />
+              </SelectTrigger>
+              <SelectContent>
+                {sections.map((section) => (
+                  <SelectItem key={section.id} value={String(section.id)}>
+                    {section.title}
+                  </SelectItem>
+                ))}
+                {sections.length === 0 && (
+                  <SelectItem value="0" disabled>
+                    No sections available
+                  </SelectItem>
+                )}
+              </SelectContent>
+            </Select>
+          </div>
+        </CardContent>
+      </Card>
+
       <Alert>
         <FileText className="h-4 w-4" />
         <AlertDescription>
@@ -89,7 +144,7 @@ export function WizardStep2Upload({
                   size="icon"
                   onClick={() => {
                     const newFiles = files.filter((_, idx) => idx !== i);
-                    onChange({ files: newFiles });
+                    onChange({ ...data, files: newFiles });
                   }}
                 >
                   <X className="h-4 w-4" />
@@ -106,7 +161,7 @@ export function WizardStep2Upload({
           <AlertDescription>{errors}</AlertDescription>
         </Alert>
       )}
-      {files.length > 0 && (
+      {data?.sectionId && files.length > 0 && (
         <Alert>
           <CheckCircle2 className="h-4 w-4 text-green-600" />
           <AlertDescription className="text-green-600">

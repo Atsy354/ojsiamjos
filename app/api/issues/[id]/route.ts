@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server"
 import { createClient } from "@/lib/supabase/server"
-import { requireEditor } from "@/lib/middleware/auth"
+import { withEditor, errorResponse, successResponse } from "@/lib/api/middleware"
 import { logger } from "@/lib/utils/logger"
 import { getContextId } from "@/lib/utils/context"
 
@@ -25,20 +25,10 @@ export async function GET(
     }
 }
 
-export async function PATCH(
-    request: NextRequest,
-    { params }: { params: { id: string } }
-) {
+export const PATCH = withEditor(async (request, { params }, { user }) => {
     const startTime = Date.now()
 
     try {
-        // Check authorization - must be editor
-        const { authorized, user, error: authError } = await requireEditor(request)
-        if (!authorized) {
-            logger.apiError('/api/issues/[id]', 'PATCH', authError)
-            return NextResponse.json({ error: authError || 'Forbidden' }, { status: 403 })
-        }
-
         logger.apiRequest('/api/issues/[id]', 'PATCH', user?.id)
 
         const body = await request.json()
@@ -47,7 +37,7 @@ export async function PATCH(
 
         if (!journalId || journalId <= 0) {
             logger.apiError('/api/issues/[id]', 'PATCH', 'Invalid journal context', user?.id)
-            return NextResponse.json({ error: "Invalid journal context" }, { status: 400 })
+            return errorResponse("Invalid journal context", 400)
         }
 
         // Verify issue belongs to journal
@@ -58,12 +48,12 @@ export async function PATCH(
             .single()
 
         if (!existingIssue) {
-            return NextResponse.json({ error: "Issue not found" }, { status: 404 })
+            return errorResponse("Issue not found", 404)
         }
 
         if (existingIssue.journal_id !== journalId) {
             logger.apiError('/api/issues/[id]', 'PATCH', 'Issue does not belong to journal', user?.id)
-            return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
+            return errorResponse('Forbidden', 403)
         }
 
         const { data, error } = await supabase
@@ -76,33 +66,23 @@ export async function PATCH(
 
         if (error) {
             logger.apiError('/api/issues/[id]', 'PATCH', error, user?.id)
-            return NextResponse.json({ error: error.message }, { status: 500 })
+            return errorResponse(error.message, 500)
         }
 
         const duration = Date.now() - startTime
         logger.apiResponse('/api/issues/[id]', 'PATCH', 200, duration, user?.id)
 
-        return NextResponse.json(data)
+        return successResponse(data)
     } catch (error: any) {
         logger.apiError('/api/issues/[id]', 'PATCH', error)
-        return NextResponse.json({ error: "Internal server error" }, { status: 500 })
+        return errorResponse("Internal server error", 500)
     }
-}
+})
 
-export async function DELETE(
-    request: NextRequest,
-    { params }: { params: { id: string } }
-) {
+export const DELETE = withEditor(async (request, { params }, { user }) => {
     const startTime = Date.now()
 
     try {
-        // Check authorization - must be editor
-        const { authorized, user, error: authError } = await requireEditor(request)
-        if (!authorized) {
-            logger.apiError('/api/issues/[id]', 'DELETE', authError)
-            return NextResponse.json({ error: authError || 'Forbidden' }, { status: 403 })
-        }
-
         logger.apiRequest('/api/issues/[id]', 'DELETE', user?.id)
 
         const supabase = await createClient()
@@ -110,7 +90,7 @@ export async function DELETE(
 
         if (!journalId || journalId <= 0) {
             logger.apiError('/api/issues/[id]', 'DELETE', 'Invalid journal context', user?.id)
-            return NextResponse.json({ error: "Invalid journal context" }, { status: 400 })
+            return errorResponse("Invalid journal context", 400)
         }
 
         const { error } = await supabase
@@ -121,16 +101,16 @@ export async function DELETE(
 
         if (error) {
             logger.apiError('/api/issues/[id]', 'DELETE', error, user?.id)
-            return NextResponse.json({ error: error.message }, { status: 500 })
+            return errorResponse(error.message, 500)
         }
 
         const duration = Date.now() - startTime
         logger.apiResponse('/api/issues/[id]', 'DELETE', 200, duration, user?.id)
         logger.warn('Issue deleted', { issueId: params.id }, { userId: user?.id, route: '/api/issues/[id]' })
 
-        return NextResponse.json({ success: true })
+        return successResponse({ success: true })
     } catch (error: any) {
         logger.apiError('/api/issues/[id]', 'DELETE', error)
-        return NextResponse.json({ error: "Internal server error" }, { status: 500 })
+        return errorResponse("Internal server error", 500)
     }
-}
+})

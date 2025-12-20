@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { logger } from "@/lib/utils/logger";
 import { createClient } from "@/lib/supabase/server";
 import { supabaseAdmin } from "@/lib/supabase/server";
-import { requireEditor } from "@/lib/middleware/auth";
+import { withEditor, errorResponse, successResponse } from "@/lib/api/middleware";
 import { z } from "zod";
 import {
   STATUS_QUEUED,
@@ -30,24 +30,11 @@ const assignReviewerSchema = z.object({
  * - Audit logging
  * - Email notification (placeholder)
  */
-export async function POST(request: NextRequest) {
+export const POST = withEditor(async (request: NextRequest, params: any, { user }) => {
   const startTime = Date.now();
   const supabase = await createClient();
 
   try {
-    // 1. Authorization check
-    const { authorized, user, error: authError } = await requireEditor(request);
-    if (!authorized) {
-      logger.apiError("/api/reviews/assign", "POST", authError);
-      return NextResponse.json(
-        {
-          error: authError || "Forbidden",
-          success: false,
-        },
-        { status: 403 }
-      );
-    }
-
     logger.apiRequest("/api/reviews/assign", "POST", user?.id);
 
     // 2. Parse and validate request
@@ -77,13 +64,7 @@ export async function POST(request: NextRequest) {
         { userId: user?.id, route: "/api/reviews/assign" }
       );
 
-      return NextResponse.json(
-        {
-          error: "submissionId and reviewerId are required",
-          success: false,
-        },
-        { status: 400 }
-      );
+      return errorResponse("submissionId and reviewerId are required", 400);
     }
 
     // 3. Verify submission exists and get context
@@ -101,13 +82,7 @@ export async function POST(request: NextRequest) {
         user?.id
       );
 
-      return NextResponse.json(
-        {
-          error: "Submission not found",
-          success: false,
-        },
-        { status: 404 }
-      );
+      return errorResponse("Submission not found", 404);
     }
 
     // COI guard: editor must not handle their own submission
@@ -134,24 +109,12 @@ export async function POST(request: NextRequest) {
       .single();
 
     if (reviewerError || !reviewer) {
-      return NextResponse.json(
-        {
-          error: "Reviewer not found",
-          success: false,
-        },
-        { status: 404 }
-      );
+      return errorResponse("Reviewer not found", 404);
     }
 
     const reviewerRoles = reviewer.roles || [];
     if (!reviewerRoles.includes("reviewer")) {
-      return NextResponse.json(
-        {
-          error: "User does not have reviewer role",
-          success: false,
-        },
-        { status: 400 }
-      );
+      return errorResponse("User does not have reviewer role", 400);
     }
 
     // 5. Check for duplicate assignment
@@ -167,13 +130,7 @@ export async function POST(request: NextRequest) {
       : await dupQuery.maybeSingle();
 
     if (existingAssignment) {
-      return NextResponse.json(
-        {
-          error: "Reviewer already assigned to this submission",
-          success: false,
-        },
-        { status: 409 }
-      );
+      return errorResponse("Reviewer already assigned to this submission", 409);
     }
 
     if (!currentReviewRoundId) {
@@ -205,13 +162,7 @@ export async function POST(request: NextRequest) {
 
         if (roundError || !newRound) {
           logger.apiError("/api/reviews/assign", "POST", roundError, user?.id);
-          return NextResponse.json(
-            {
-              error: "Failed to create review round",
-              success: false,
-            },
-            { status: 500 }
-          );
+          return errorResponse("Failed to create review round", 500);
         }
 
         currentReviewRoundId = newRound.review_round_id;
@@ -253,13 +204,9 @@ export async function POST(request: NextRequest) {
 
     if (assignmentError || !assignment) {
       logger.apiError("/api/reviews/assign", "POST", assignmentError, user?.id);
-      return NextResponse.json(
-        {
-          error:
-            assignmentError?.message || "Failed to create review assignment",
-          success: false,
-        },
-        { status: 500 }
+      return errorResponse(
+        assignmentError?.message || "Failed to create review assignment",
+        500
       );
     }
 
@@ -345,7 +292,7 @@ export async function POST(request: NextRequest) {
       { status: 500 }
     );
   }
-}
+});
 
 /**
  * GET /api/reviews/assign
@@ -356,13 +303,8 @@ export async function POST(request: NextRequest) {
  * - Not already assigned to this submission
  * - Optional: expertise matching
  */
-export async function GET(request: NextRequest) {
+export const GET = withEditor(async (request: NextRequest, params: any, { user }) => {
   try {
-    const { authorized, user, error: authError } = await requireEditor(request);
-    if (!authorized) {
-      return NextResponse.json({ error: authError }, { status: 403 });
-    }
-
     const { searchParams } = new URL(request.url);
     const submissionId = searchParams.get("submissionId");
     const search = searchParams.get("search") || "";
@@ -520,4 +462,4 @@ export async function GET(request: NextRequest) {
       { status: 500 }
     );
   }
-}
+});

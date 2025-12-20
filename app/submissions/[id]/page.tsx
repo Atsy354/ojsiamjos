@@ -74,6 +74,8 @@ import { AuthorCopyeditingPanel } from "@/components/workflow/author-copyediting
 import { AuthorProofreadingPanel } from "@/components/workflow/author-proofreading-panel";
 import { WorkflowActions } from "@/components/workflow/workflow-actions";
 import { WithdrawDialog } from "@/components/submissions/withdraw-dialog";
+import { EditorialDecisionPanel } from "@/components/editorial/EditorialDecisionPanel";
+
 
 export default function SubmissionDetailPage() {
   const params = useParams();
@@ -472,8 +474,11 @@ export default function SubmissionDetailPage() {
   const isSubmitter = submission?.submitterId
     ? submission.submitterId === user?.id
     : (submission as any)?.submitter_id === user?.id;
-  const isRevisionRequired = status === "revision_required";
-  const isCopyediting = status === "copyediting";
+  const isRevisionRequired = status === "revision_required" || status === "revisions_required";
+  const isCopyediting = status === "copyediting" ||
+    (status === 1 || status === "1") ||
+    (submission as any)?.stage_id === 4 ||
+    (submission as any)?.stageId === 4;
   const isProduction = status === "production" ||
     (submission as any)?.stage_id === 5 ||
     (submission as any)?.stageId === 5;
@@ -833,10 +838,10 @@ export default function SubmissionDetailPage() {
             <Tabs defaultValue="files" className="space-y-4">
               <TabsList className="w-full overflow-x-auto whitespace-nowrap justify-start">
                 <TabsTrigger value="files">Files</TabsTrigger>
-                <TabsTrigger value="participants">Participants</TabsTrigger>
-                <TabsTrigger value="review">Review</TabsTrigger>
+                {isEditor && <TabsTrigger value="participants">Participants</TabsTrigger>}
+                {isEditor && <TabsTrigger value="review">Review</TabsTrigger>}
                 <TabsTrigger value="discussion">Discussion</TabsTrigger>
-                <TabsTrigger value="history">History</TabsTrigger>
+                {isEditor && <TabsTrigger value="history">History</TabsTrigger>}
               </TabsList>
 
               {/* Files Tab */}
@@ -1310,6 +1315,58 @@ export default function SubmissionDetailPage() {
                         </Card>
                       );
                     })}
+
+                    {/* Editorial Decision Panel - Show when all reviews are complete */}
+                    {isEditor && (() => {
+                      // Find round with all reviews complete
+                      const activeRound = rounds.find((round: any) => {
+                        const roundReviews = (reviews || []).filter((r: any) => r?.reviewRoundId === round?.id);
+                        const allComplete = roundReviews.length > 0 && roundReviews.every((r: any) => r?.dateCompleted);
+                        const roundStatus = round?.status;
+                        // Show if status is RECOMMENDATIONS_READY (11) or all reviews complete
+                        return allComplete && (roundStatus === 11 || roundStatus === '11');
+                      });
+
+                      if (!activeRound) return null;
+
+                      const completedReviews = (reviews || [])
+                        .filter((r: any) => r?.reviewRoundId === activeRound?.id && r?.dateCompleted)
+                        .map((review: any) => {
+                          const reviewer = (reviewers || []).find(
+                            (r: User) => String(r.id) === String(review?.reviewerId)
+                          );
+                          return {
+                            id: review.id,
+                            reviewer: {
+                              firstName: reviewer?.firstName || reviewer?.first_name || '',
+                              lastName: reviewer?.lastName || reviewer?.last_name || '',
+                              email: reviewer?.email || ''
+                            },
+                            recommendation: review.recommendation,
+                            comments: review.comments || '',
+                            confidentialComments: review.confidential_comments || review.confidentialComments,
+                            quality: review.quality,
+                            dateCompleted: review.dateCompleted || review.date_completed
+                          };
+                        });
+
+                      if (completedReviews.length === 0) return null;
+
+                      return (
+                        <div className="mt-6">
+                          <EditorialDecisionPanel
+                            submissionId={Number(params.id)}
+                            reviewRoundId={activeRound.id}
+                            reviews={completedReviews}
+                            onDecisionMade={async () => {
+                              await refetchSubmission();
+                              await refetchRounds();
+                              toast.success("Editorial decision recorded");
+                            }}
+                          />
+                        </div>
+                      );
+                    })()}
                   </div>
                 )}
               </TabsContent>
@@ -1544,8 +1601,8 @@ export default function SubmissionDetailPage() {
               </Card>
             )}
 
-            {/* Production Workflow Button */}
-            {isProduction && (
+            {/* Production Workflow Button - Editor Only */}
+            {isProduction && isEditor && (
               <Card className="border-purple-200 bg-purple-50">
                 <CardContent className="p-4">
                   <div className="space-y-3">
@@ -1635,26 +1692,30 @@ export default function SubmissionDetailPage() {
                       : "Not submitted"}
                   </span>
                 </div>
-                <Separator />
-                <div className="flex items-center justify-between text-sm">
-                  <span className="text-muted-foreground">Current Round</span>
-                  <span>{computedCurrentRound || 0}</span>
-                </div>
-                <Separator />
-                <div className="flex items-center justify-between text-sm">
-                  <span className="text-muted-foreground">Stage</span>
-                  <span>
-                    {computedStageId === 1
-                      ? "Submission"
-                      : computedStageId === 3
-                        ? "Review"
-                        : computedStageId === 4
-                          ? "Copyediting"
-                          : computedStageId === 5
-                            ? "Production"
-                            : "Submission"}
-                  </span>
-                </div>
+                {isEditor && (
+                  <>
+                    <Separator />
+                    <div className="flex items-center justify-between text-sm">
+                      <span className="text-muted-foreground">Current Round</span>
+                      <span>{computedCurrentRound || 0}</span>
+                    </div>
+                    <Separator />
+                    <div className="flex items-center justify-between text-sm">
+                      <span className="text-muted-foreground">Stage</span>
+                      <span>
+                        {computedStageId === 1
+                          ? "Submission"
+                          : computedStageId === 3
+                            ? "Review"
+                            : computedStageId === 4
+                              ? "Copyediting"
+                              : computedStageId === 5
+                                ? "Production"
+                                : "Submission"}
+                      </span>
+                    </div>
+                  </>
+                )}
                 <Separator />
                 <div className="flex items-center justify-between text-sm">
                   <span className="text-muted-foreground">Section</span>

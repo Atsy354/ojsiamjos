@@ -1,19 +1,12 @@
 import { NextRequest, NextResponse } from "next/server"
 import { createClient } from "@/lib/supabase/server"
-import { requireEditor } from "@/lib/middleware/auth"
+import { withEditor, errorResponse } from "@/lib/api/middleware"
 import { logger } from "@/lib/utils/logger"
 
-export async function POST(request: NextRequest) {
+export const POST = withEditor(async (request, params, { user }) => {
     const startTime = Date.now()
 
     try {
-        // Check authorization - must be Manager or Editor
-        const { authorized, user, error: authError } = await requireEditor(request)
-        if (!authorized) {
-            logger.apiError('/api/production/galley', 'POST', authError)
-            return NextResponse.json({ error: authError || 'Unauthorized' }, { status: 403 })
-        }
-
         logger.apiRequest('/api/production/galley', 'POST', user?.id)
 
         const body = await request.json()
@@ -21,10 +14,7 @@ export async function POST(request: NextRequest) {
 
         // Validate required fields
         if (!submissionId || !fileId || !galleyType || !label) {
-            return NextResponse.json(
-                { error: "Missing required fields" },
-                { status: 400 }
-            )
+            return errorResponse("Missing required fields", 400)
         }
 
         const supabase = await createClient()
@@ -45,7 +35,7 @@ export async function POST(request: NextRequest) {
 
         if (dbError) {
             logger.apiError('/api/production/galley', 'POST', dbError, user?.id)
-            return NextResponse.json({ error: dbError.message }, { status: 500 })
+            return errorResponse(dbError.message, 500)
         }
 
         const duration = Date.now() - startTime
@@ -59,6 +49,6 @@ export async function POST(request: NextRequest) {
         return NextResponse.json(galley, { status: 201 })
     } catch (error) {
         logger.apiError('/api/production/galley', 'POST', error)
-        return NextResponse.json({ error: "Internal server error" }, { status: 500 })
+        return errorResponse("Internal server error", 500)
     }
-}
+})

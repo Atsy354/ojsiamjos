@@ -90,7 +90,7 @@ export default function SubmissionsPage() {
     if (["unassigned", "submission"].includes(stage)) return "unassigned"
     return "all"
   }, [params])
-  
+
   const handleDelete = async (id: string) => {
     try {
       await deleteSubmission(id)

@@ -5,7 +5,7 @@ import { logger } from "@/lib/utils/logger"
 
 export async function POST(
     request: NextRequest,
-    { params }: { params: { id: string } }
+    { params }: { params: Promise<{ id: string }> }
 ) {
     const startTime = Date.now()
 
@@ -19,30 +19,33 @@ export async function POST(
 
         logger.apiRequest('/api/copyediting/[id]/approve', 'POST', user?.id)
 
-        const submissionId = params.id
+        const resolvedParams = await params;
+        const submissionId = parseInt(resolvedParams.id, 10);
+        if (isNaN(submissionId)) {
+            return NextResponse.json({ error: 'Invalid submission ID' }, { status: 400 });
+        }
+
         const body = await request.json()
         const { approved, comments } = body
 
         const supabase = await createClient()
 
-        // Create or update author approval
+        // Record author approval (simple insert, no upsert)
         const { data: approval, error: dbError } = await supabase
             .from("author_approvals")
-            .upsert({
+            .insert({
                 submission_id: submissionId,
-                author_id: user?.id,
+                author_id: String(user?.id),
                 approved,
                 comments: comments || null,
                 date_approved: new Date().toISOString(),
-            }, {
-                onConflict: 'submission_id,author_id'
             })
             .select()
-            .single()
+            .single();
 
         if (dbError) {
-            logger.apiError('/api/copyediting/[id]/approve', 'POST', dbError, user?.id)
-            return NextResponse.json({ error: dbError.message }, { status: 500 })
+            logger.apiError('/api/copyediting/[id]/approve', 'POST', dbError, user?.id);
+            return NextResponse.json({ error: dbError.message }, { status: 500 });
         }
 
         // If approved, mark copyediting as complete

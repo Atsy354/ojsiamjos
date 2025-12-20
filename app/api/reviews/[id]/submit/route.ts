@@ -74,11 +74,7 @@ export async function POST(
         // 3. Verify assignment exists and belongs to reviewer
         const { data: assignment, error: assignmentError } = await supabase
             .from("review_assignments")
-            .select(`
-        *,
-        submission:submissions(id, title, submitter_id, stage_id),
-        review_round:review_rounds(review_round_id, round, status, submission_id)
-      `)
+            .select("*")
             .eq("id", reviewAssignmentId)
             .single()
 
@@ -113,7 +109,6 @@ export async function POST(
             }, { status: 400 })
         }
 
-        // 4. Update review assignment with review content
         const { data: updated, error: updateError } = await supabase
             .from("review_assignments")
             .update({
@@ -126,12 +121,7 @@ export async function POST(
                 last_modified: new Date().toISOString()
             })
             .eq("id", reviewAssignmentId)
-            .select(`
-        *,
-        reviewer:users!review_assignments_reviewer_id_fkey(
-          id, first_name, last_name, email
-        )
-      `)
+            .select("*")
             .single()
 
         if (updateError || !updated) {
@@ -143,12 +133,11 @@ export async function POST(
         }
 
         // 5. Check if all reviews for this round are complete
-        const reviewRound = assignment.review_round as any
-        if (reviewRound) {
+        if (assignment.review_round_id) {
             const { data: allReviews } = await supabase
                 .from("review_assignments")
                 .select("id, date_completed, cancelled")
-                .eq("review_round_id", reviewRound.review_round_id)
+                .eq("review_round_id", assignment.review_round_id)
                 .eq("cancelled", false)
 
             const allComplete = allReviews?.every(r => r.date_completed !== null)
@@ -161,28 +150,27 @@ export async function POST(
                         status: 11, // RECOMMENDATIONS_READY
                         date_modified: new Date().toISOString()
                     })
-                    .eq("review_round_id", reviewRound.review_round_id)
+                    .eq("review_round_id", assignment.review_round_id)
             }
         }
 
         // 6. Update submission last activity
-        const submissionData = assignment.submission as any
         await supabase
             .from("submissions")
             .update({
                 date_last_activity: new Date().toISOString(),
                 updated_at: new Date().toISOString()
             })
-            .eq("id", submissionData?.id)
+            .eq("id", assignment.submission_id)
 
         // 7. Notify editor
         await supabase
             .from("workflow_notifications")
             .insert({
-                submission_id: submissionData?.id,
-                user_id: submissionData?.submitter_id,
+                submission_id: assignment.submission_id,
+                user_id: user?.id,
                 type: 'review_submitted',
-                message: `Review completed for submission ${submissionData?.id}`,
+                message: `Review completed for submission ${assignment.submission_id}`,
                 is_read: false,
                 created_at: new Date().toISOString()
             })
@@ -192,7 +180,7 @@ export async function POST(
             await supabase
                 .from("workflow_audit_log")
                 .insert({
-                    submission_id: submissionData?.id,
+                    submission_id: assignment.submission_id,
                     user_id: user?.id,
                     action: 'review_submitted',
                     metadata: {

@@ -4,7 +4,7 @@ import { Card, CardContent } from "@/components/ui/card"
 import { Checkbox } from "@/components/ui/checkbox"
 import { Label } from "@/components/ui/label"
 import { Alert, AlertDescription } from "@/components/ui/alert"
-import { CheckCircle2, FileText, Users } from "lucide-react"
+import { FileText, Users } from "lucide-react"
 import { Badge } from "@/components/ui/badge"
 
 export function WizardStep4Confirmation({ data, onChange, allData, errors }: any) {
@@ -14,8 +14,6 @@ export function WizardStep4Confirmation({ data, onChange, allData, errors }: any
 
     return (
         <div className="space-y-6">
-            <Alert><CheckCircle2 className="h-4 w-4" /><AlertDescription>Review your submission before finalizing</AlertDescription></Alert>
-
             {/* Summary */}
             <Card><CardContent className="pt-6 space-y-4">
                 <h3 className="font-semibold text-lg">Submission Summary</h3>

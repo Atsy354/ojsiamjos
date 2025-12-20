@@ -57,11 +57,7 @@ export async function PATCH(
         // 3. Verify assignment exists and belongs to this reviewer
         const { data: assignment, error: assignmentError } = await supabase
             .from("review_assignments")
-            .select(`
-        *,
-        submission:submissions(id, title, submitter_id),
-        review_round:review_rounds(review_round_id, round, status)
-      `)
+            .select("*")
             .eq("id", reviewAssignmentId)
             .single()
 
@@ -99,7 +95,8 @@ export async function PATCH(
         const updateData: any = {
             declined,
             date_confirmed: new Date().toISOString(),
-            last_modified: new Date().toISOString()
+            last_modified: new Date().toISOString(),
+            status: declined ? 1 : 2  // 1 = DECLINED, 2 = ACCEPTED
         }
 
         if (comments) {
@@ -110,11 +107,7 @@ export async function PATCH(
             .from("review_assignments")
             .update(updateData)
             .eq("id", reviewAssignmentId)
-            .select(`
-        *,
-        reviewer:users!review_assignments_reviewer_id_fkey(id, first_name, last_name, email),
-        review_round:review_rounds(review_round_id, round, status)
-      `)
+            .select("*")
             .single()
 
         if (updateError || !updated) {
@@ -126,27 +119,26 @@ export async function PATCH(
         }
 
         // 6. Update review round status if needed
-        if (!declined && assignment.review_round) {
+        if (!declined && assignment.review_round_id) {
             await supabase
                 .from("review_rounds")
                 .update({
                     status: 8, // PENDING_REVIEWS (reviewer accepted, now waiting for review)
                     date_modified: new Date().toISOString()
                 })
-                .eq("review_round_id", assignment.review_round.review_round_id)
+                .eq("review_round_id", assignment.review_round_id)
         }
 
         // 7. Create notification for editor
-        const submissionData = assignment.submission as any
         await supabase
             .from("workflow_notifications")
             .insert({
-                submission_id: submissionData?.id,
-                user_id: submissionData?.submitter_id,
+                submission_id: assignment.submission_id,
+                user_id: user?.id,
                 type: declined ? 'reviewer_declined' : 'reviewer_accepted',
                 message: declined
-                    ? `Reviewer declined review for submission ${submissionData?.id}`
-                    : `Reviewer accepted review for submission ${submissionData?.id}`,
+                    ? `Reviewer declined review for submission ${assignment.submission_id}`
+                    : `Reviewer accepted review for submission ${assignment.submission_id}`,
                 is_read: false,
                 created_at: new Date().toISOString()
             })
@@ -155,7 +147,7 @@ export async function PATCH(
         await supabase
             .from("workflow_audit_log")
             .insert({
-                submission_id: submissionData?.id,
+                submission_id: assignment.submission_id,
                 user_id: user?.id,
                 action: declined ? 'review_declined' : 'review_accepted',
                 metadata: {

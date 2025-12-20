@@ -85,7 +85,8 @@ export async function POST(
         .select("id")
         .eq("submission_id", resolvedSubmissionId)
         .eq("reviewer_id", user?.id)
-        .single();
+        .limit(1)
+        .maybeSingle();
 
       if (!review) {
         return NextResponse.json({ error: "Forbidden" }, { status: 403 });
@@ -102,11 +103,37 @@ export async function POST(
       fileStage
     );
 
+
     // 5. Insert into Database
     // We use strict mapping to our new schema
+    // Support both numeric and string file stages
+    let fileStageValue: any = fileStage;
+    if (typeof fileStage === 'string') {
+      // Map string stages to numeric if needed, or keep as string
+      const stageMap: Record<string, number> = {
+        'submission': 2,
+        'review': 2,
+        'copyedit': 4,
+        'copyedit_initial': 4,
+        'copyedit_final': 10,
+        'production': 10,
+        'revision': 2
+      };
+
+      // If it's a known string stage, use mapping; otherwise try to parse as number
+      if (fileStage in stageMap) {
+        fileStageValue = stageMap[fileStage];
+      } else if (!isNaN(Number(fileStage))) {
+        fileStageValue = Number(fileStage);
+      } else {
+        // Keep as string for custom stages
+        fileStageValue = fileStage;
+      }
+    }
+
     const payload: any = {
       submission_id: resolvedSubmissionId,
-      file_stage: isNaN(Number(fileStage)) ? 2 : Number(fileStage),
+      file_stage: fileStageValue,
       original_file_name: uploadResult.fileName, // Original name
       file_name:
         uploadResult.filePath.split("/").pop() || uploadResult.fileName, // Storage key
@@ -236,7 +263,8 @@ export async function GET(
       .select("id")
       .eq("submission_id", resolvedSubmissionId)
       .eq("reviewer_id", user?.id)
-      .single();
+      .limit(1)
+      .maybeSingle();
     if (!review)
       return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   }

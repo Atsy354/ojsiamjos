@@ -194,19 +194,11 @@ export function Sidebar({ isOpen, onClose }: SidebarProps) {
         roles: ["author"],
         items: [
           {
-            title: "Active Submissions",
+            title: "My Queue",
             href: journalPath
               ? `${ROUTES.journalSubmissions(journalPath)}?status=active`
               : `${ROUTES.MY_SUBMISSIONS}?status=active`,
             icon: FolderOpen,
-            roles: ["author"],
-          },
-          {
-            title: "Incomplete Submissions",
-            href: journalPath
-              ? `${ROUTES.journalSubmissions(journalPath)}?status=incomplete`
-              : `${ROUTES.MY_SUBMISSIONS}?status=incomplete`,
-            icon: FileText,
             roles: ["author"],
           },
           {

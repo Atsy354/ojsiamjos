@@ -25,14 +25,10 @@ export async function GET(request: NextRequest) {
     const submissionId = searchParams.get("submissionId")
     const reviewerId = searchParams.get("reviewerId")
 
+    // Simplified query - fetch review_assignments first
     let query = supabase
       .from("review_assignments")
-      .select(`
-        *,
-        reviewer:users!review_assignments_reviewer_id_fkey(id, first_name, last_name, email),
-        submission:submissions(id, title, status, stage_id, submitter_id),
-        review_round:review_rounds(review_round_id, round, status)
-      `)
+      .select("*")
       .order("date_assigned", { ascending: false })
 
     if (submissionId) {
@@ -50,7 +46,15 @@ export async function GET(request: NextRequest) {
       }
     }
 
-    const { data: reviews, error } = await query
+    const { data: reviewAssignments, error } = await query
+
+    console.log('[Reviews GET] Query result:', {
+      reviewerId,
+      assignmentsCount: reviewAssignments?.length || 0,
+      error: error?.message,
+      userRoles,
+      userId: user?.id
+    })
 
     if (error) {
       logger.apiError('/api/reviews', 'GET', error, user?.id)
@@ -60,12 +64,49 @@ export async function GET(request: NextRequest) {
       )
     }
 
+    // Manual join with users and submissions
+    const reviews = reviewAssignments || []
+
+    // Get unique reviewer IDs and submission IDs
+    const reviewerIds = [...new Set(reviews.map(r => r.reviewer_id).filter(Boolean))]
+    const submissionIds = [...new Set(reviews.map(r => r.submission_id).filter(Boolean))]
+
+    // Fetch reviewers (only if we have IDs)
+    let reviewers: any[] = []
+    if (reviewerIds.length > 0) {
+      const { data } = await supabase
+        .from('users')
+        .select('id, first_name, last_name, email')
+        .in('id', reviewerIds)
+      reviewers = data || []
+    }
+
+    // Fetch submissions (only if we have IDs)
+    let submissions: any[] = []
+    if (submissionIds.length > 0) {
+      const { data } = await supabase
+        .from('submissions')
+        .select('id, title, status, stage_id, submitter_id')
+        .in('id', submissionIds)
+      submissions = data || []
+    }
+
+    // Create lookup maps
+    const reviewerMap = new Map(reviewers.map(r => [r.id, r]))
+    const submissionMap = new Map(submissions.map(s => [s.id, s]))
+
+    // Attach related data
+    const reviewsWithRelations = reviews.map(review => ({
+      ...review,
+      reviewer: reviewerMap.get(review.reviewer_id) || null,
+      submission: submissionMap.get(review.submission_id) || null
+    }))
+
     const duration = Date.now() - startTime
     logger.apiResponse('/api/reviews', 'GET', 200, duration, user?.id)
 
-    // PostgREST embedded relations can be null if FK metadata differs.
-    // Fallback: attach submissions by submission_id if missing.
-    let safeReviews: any[] = Array.isArray(reviews) ? reviews : []
+    // Use the manually joined data
+    let safeReviews: any[] = Array.isArray(reviewsWithRelations) ? reviewsWithRelations : []
 
     // Normalize embedded relations: PostgREST can return arrays when FK metadata is missing.
     safeReviews = safeReviews.map((r: any) => {

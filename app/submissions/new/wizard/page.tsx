@@ -27,6 +27,7 @@ import { CheckCircle2, ChevronLeft, ChevronRight, Loader2 } from "lucide-react";
 import { apiPost, apiPatch, apiUploadFile } from "@/lib/api/client";
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/lib/hooks/use-auth";
+import { cn } from "@/lib/utils";
 import type {
   CompleteWizardData,
   SubmissionProgress,
@@ -121,10 +122,11 @@ export default function SubmissionWizardPage() {
   const createDraftSubmissionIfNeeded = async (): Promise<number | string> => {
     if (submissionId) return submissionId;
 
-    const step1: any = (wizardDataRef.current as any).step1 || {};
-    const sectionId = step1.sectionId;
+    // Section will be selected in Step 2, so we get it from step2 data
+    const step2: any = (wizardDataRef.current as any).step2 || {};
+    const sectionId = step2.sectionId;
     if (!sectionId) {
-      throw new Error("Section is required before starting file upload");
+      throw new Error("Section is required before creating submission");
     }
 
     // OJS behavior: a draft submission exists before files/metadata are fully complete.
@@ -206,16 +208,44 @@ export default function SubmissionWizardPage() {
     const stepData = (wizardDataRef.current as any)[`step${step}`] as any;
 
     switch (step) {
-      case 1:
-        if (!stepData?.submissionRequirements) {
+      case 1: {
+        // Check all individual requirements
+        const allRequirementsChecked =
+          stepData?.requirement1 &&
+          stepData?.requirement2 &&
+          stepData?.requirement3 &&
+          stepData?.requirement4 &&
+          stepData?.requirement5;
+
+        if (!allRequirementsChecked) {
           setErrors({
-            step1: "Please confirm you meet submission requirements",
+            step1: "Please check all submission requirements",
           });
           return false;
         }
+
+        if (!stepData?.copyrightNotice) {
+          setErrors({
+            step1: "Please agree to the copyright statement",
+          });
+          return false;
+        }
+
+        if (!stepData?.privacyStatement) {
+          setErrors({
+            step1: "Please agree to the privacy statement",
+          });
+          return false;
+        }
+
         return true;
+      }
 
       case 2:
+        if (!stepData?.sectionId) {
+          setErrors({ step2: "Please select a section" });
+          return false;
+        }
         if (!stepData?.files || stepData.files.length === 0) {
           setErrors({ step2: "Please upload at least one file" });
           return false;
@@ -296,25 +326,10 @@ export default function SubmissionWizardPage() {
       return;
     }
 
-    // OJS-like: ensure a draft exists before upload.
-    if (currentStep === 1) {
-      setIsLoading(true);
-      try {
-        await createDraftSubmissionIfNeeded();
-      } catch (error: any) {
-        toast({
-          title: "Error",
-          description: error.message || "Failed to start submission",
-          variant: "destructive",
-        });
-        setIsLoading(false);
-        return;
-      } finally {
-        setIsLoading(false);
-      }
-    }
+    // Step 1: Just validate and move to next step (no draft creation yet)
+    // Draft will be created in Step 2 after section is selected
 
-    // Upload files once draft exists (step 2 -> step 3)
+    // Upload files and create draft once section is selected (step 2 -> step 3)
     if (currentStep === 2) {
       setIsLoading(true);
       try {
@@ -350,6 +365,37 @@ export default function SubmissionWizardPage() {
         toast({
           title: "Error",
           description: error.message || "Failed to create submission",
+          variant: "destructive",
+        });
+        setIsLoading(false);
+        return;
+      } finally {
+        setIsLoading(false);
+      }
+    }
+
+    // Complete submission (step 4 -> step 5)
+    if (currentStep === 4) {
+      setIsLoading(true);
+      try {
+        const id = await createDraftSubmissionIfNeeded();
+        // Ensure metadata is applied before final submit
+        await saveMetadataIfPresent(id);
+
+        // Final submission (schema-tolerant on backend)
+        await apiPatch(`/api/submissions/${id}`, {
+          status: "submitted",
+          dateSubmitted: new Date().toISOString(),
+        });
+
+        toast({
+          title: "Submission complete!",
+          description: "Your manuscript has been submitted successfully.",
+        });
+      } catch (error: any) {
+        toast({
+          title: "Error",
+          description: error.message || "Failed to complete submission",
           variant: "destructive",
         });
         setIsLoading(false);
@@ -438,7 +484,7 @@ export default function SubmissionWizardPage() {
           <WizardStep4Confirmation {...commonProps} allData={wizardData} />
         );
       case 5:
-        return <WizardStep5Finish {...commonProps} onFinish={handleFinish} />;
+        return <WizardStep5Finish submissionId={submissionId} />;
       default:
         return null;
     }
@@ -456,37 +502,66 @@ export default function SubmissionWizardPage() {
     <div className="container max-w-4xl mx-auto py-8 px-4">
       {/* Header */}
       <div className="mb-8">
-        <h1 className="text-3xl font-bold mb-2">New Submission</h1>
-        <p className="text-muted-foreground">
-          Complete the following steps to submit your manuscript
-        </p>
+        <h1 className="text-3xl font-bold mb-2">Submit an Article</h1>
       </div>
 
       {/* Progress Bar */}
       <div className="mb-8">
-        <div className="flex justify-between mb-2">
+        <div className="flex justify-between items-start mb-4">
           {STEPS.map((step, index) => (
-            <div key={step.id} className="flex items-center">
-              <div
-                className={`flex items-center justify-center w-10 h-10 rounded-full border-2 ${currentStep > step.id
-                  ? "bg-primary border-primary text-primary-foreground"
-                  : currentStep === step.id
-                    ? "border-primary text-primary"
-                    : "border-muted text-muted-foreground"
-                  }`}
-              >
-                {currentStep > step.id ? (
-                  <CheckCircle2 className="h-5 w-5" />
-                ) : (
-                  <span className="text-sm font-semibold">{step.id}</span>
-                )}
-              </div>
-              {index < STEPS.length - 1 && (
+            <div key={step.id} className="flex items-center flex-1">
+              <div className="flex flex-col items-center flex-1">
+                {/* Step Title */}
+                <div className="mb-3 text-center">
+                  <p
+                    className={cn(
+                      "text-sm font-medium whitespace-nowrap",
+                      currentStep === step.id
+                        ? "text-primary font-semibold"
+                        : currentStep > step.id
+                          ? "text-foreground"
+                          : "text-muted-foreground"
+                    )}
+                  >
+                    {step.title}
+                  </p>
+                </div>
+                {/* Step Number Circle - Clickable for completed steps */}
                 <div
-                  className={`h-0.5 w-full mx-2 ${currentStep > step.id ? "bg-primary" : "bg-muted"
-                    }`}
-                  style={{ width: "80px" }}
-                />
+                  onClick={() => {
+                    // Only allow clicking on completed steps (backward navigation)
+                    if (currentStep > step.id) {
+                      setCurrentStep(step.id);
+                      window.scrollTo({ top: 0, behavior: "smooth" });
+                    }
+                  }}
+                  className={cn(
+                    "flex items-center justify-center w-10 h-10 rounded-full border-2 transition-all",
+                    currentStep > step.id
+                      ? "bg-primary border-primary text-primary-foreground cursor-pointer hover:opacity-80"
+                      : currentStep === step.id
+                        ? "border-primary text-primary bg-background shadow-md"
+                        : "border-muted-foreground/30 text-muted-foreground bg-background"
+                  )}
+                  title={currentStep > step.id ? `Go to ${step.title}` : undefined}
+                >
+                  {currentStep > step.id ? (
+                    <CheckCircle2 className="h-5 w-5" />
+                  ) : (
+                    <span className="text-sm font-semibold">{step.id}</span>
+                  )}
+                </div>
+              </div>
+              {/* Connector Line */}
+              {index < STEPS.length - 1 && (
+                <div className="flex-1 px-2 mt-9">
+                  <div
+                    className={cn(
+                      "h-0.5 w-full transition-colors",
+                      currentStep > step.id ? "bg-primary" : "bg-muted-foreground/30"
+                    )}
+                  />
+                </div>
               )}
             </div>
           ))}
@@ -504,43 +579,60 @@ export default function SubmissionWizardPage() {
 
       {/* Current Step */}
       <Card className="mb-6">
-        <CardHeader>
-          <CardTitle>
-            Step {currentStep}: {STEPS[currentStep - 1].title}
-          </CardTitle>
-          <CardDescription>
-            {STEPS[currentStep - 1].description}
-          </CardDescription>
-        </CardHeader>
-        <CardContent>{renderStep()}</CardContent>
-        <CardFooter className="flex justify-between">
-          <Button
-            variant="outline"
-            onClick={handlePrevious}
-            disabled={currentStep === 1 || isLoading}
-          >
-            <ChevronLeft className="mr-2 h-4 w-4" />
-            Previous
-          </Button>
+        <CardContent className="pt-6">{renderStep()}</CardContent>
+        {/* Show footer with buttons */}
+        {currentStep < STEPS.length ? (
+          <CardFooter className="flex justify-between">
+            {currentStep > 1 ? (
+              <Button
+                variant="outline"
+                onClick={handlePrevious}
+                disabled={isLoading}
+              >
+                <ChevronLeft className="mr-2 h-4 w-4" />
+                Previous
+              </Button>
+            ) : (
+              <div />
+            )}
 
-          {currentStep < STEPS.length ? (
-            <Button onClick={handleNext} disabled={isLoading}>
-              Next
-              <ChevronRight className="ml-2 h-4 w-4" />
+            {currentStep === 4 ? (
+              // Step 4: Show "Finish Submission" button
+              <Button onClick={handleNext} disabled={isLoading}>
+                {isLoading ? (
+                  <>
+                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                    Submitting...
+                  </>
+                ) : (
+                  <>
+                    Finish Submission
+                    <ChevronRight className="ml-2 h-4 w-4" />
+                  </>
+                )}
+              </Button>
+            ) : (
+              // Other steps: Show "Next" button
+              <Button onClick={handleNext} disabled={isLoading}>
+                Next
+                <ChevronRight className="ml-2 h-4 w-4" />
+              </Button>
+            )}
+          </CardFooter>
+        ) : (
+          // Step 5: Only show Previous button for editing
+          <CardFooter className="flex justify-between">
+            <Button
+              variant="outline"
+              onClick={handlePrevious}
+              disabled={isLoading}
+            >
+              <ChevronLeft className="mr-2 h-4 w-4" />
+              Previous
             </Button>
-          ) : (
-            <Button onClick={handleFinish} disabled={isLoading}>
-              {isLoading ? (
-                <>
-                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                  Submitting...
-                </>
-              ) : (
-                "Complete Submission"
-              )}
-            </Button>
-          )}
-        </CardFooter>
+            <div />
+          </CardFooter>
+        )}
       </Card>
 
       {/* Help Text */}

@@ -1,14 +1,11 @@
 "use client"
 
-import { useState, useEffect } from "react"
-import { Card, CardContent } from "@/components/ui/card"
+import { useState } from "react"
 import { Label } from "@/components/ui/label"
 import { Checkbox } from "@/components/ui/checkbox"
 import { Textarea } from "@/components/ui/textarea"
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Alert, AlertDescription } from "@/components/ui/alert"
 import { CheckCircle2, AlertCircle } from "lucide-react"
-import { apiGet } from "@/lib/api/client"
 import type { WizardStep1Data } from "@/lib/types/workflow"
 
 interface WizardStep1Props {
@@ -19,20 +16,6 @@ interface WizardStep1Props {
 
 export function WizardStep1Start({ data, onChange, errors }: WizardStep1Props) {
     const [localData, setLocalData] = useState<Partial<WizardStep1Data>>(data || {})
-    const [sections, setSections] = useState<any[]>([])
-
-    useEffect(() => {
-        fetchSections()
-    }, [])
-
-    const fetchSections = async () => {
-        try {
-            const response = await apiGet('/api/sections')
-            setSections(response || [])
-        } catch (error) {
-            console.error('Failed to load sections:', error)
-        }
-    }
 
     const handleChange = (field: string, value: any) => {
         const updated = { ...localData, [field]: value }
@@ -40,149 +23,245 @@ export function WizardStep1Start({ data, onChange, errors }: WizardStep1Props) {
         onChange(updated)
     }
 
+    // Submission requirements checklist items
+    const submissionRequirements = [
+        {
+            id: 'req1',
+            field: 'requirement1',
+            text: 'The submission has not been previously published, nor is it before another journal for consideration (or an explanation has been provided in Comments to the Editor).'
+        },
+        {
+            id: 'req2',
+            field: 'requirement2',
+            text: 'The submission file is in OpenOffice, Microsoft Word, or RTF document file format.'
+        },
+        {
+            id: 'req3',
+            field: 'requirement3',
+            text: 'Where available, URLs for the references have been provided.'
+        },
+        {
+            id: 'req4',
+            field: 'requirement4',
+            text: 'The text is single-spaced; uses a 12-point font; employs italics, rather than underlining (except with URL addresses); and all illustrations, figures, and tables are placed within the text at the appropriate points, rather than at the end.'
+        },
+        {
+            id: 'req5',
+            field: 'requirement5',
+            text: 'The text adheres to the stylistic and bibliographic requirements outlined in the Author Guidelines.'
+        }
+    ]
+
+    const allRequirementsChecked = submissionRequirements.every(req =>
+        localData[req.field as keyof WizardStep1Data]
+    )
+
     const allChecked =
-        localData.submissionRequirements &&
+        allRequirementsChecked &&
         localData.copyrightNotice &&
         localData.privacyStatement
 
     return (
         <div className="space-y-6">
-            {/* Introduction */}
-            <Alert>
-                <CheckCircle2 className="h-4 w-4" />
-                <AlertDescription>
-                    Before you begin, please ensure you have prepared all necessary files and information
-                    for your submission. The submission process consists of 5 steps.
-                </AlertDescription>
-            </Alert>
+            {/* Submission Requirements */}
+            <div className="space-y-4">
+                <div>
+                    <h3 className="text-base font-semibold mb-2">Submission Requirements</h3>
+                    <p className="text-sm text-muted-foreground mb-4">
+                        You must read and acknowledge that you've completed the requirements below before proceeding.
+                    </p>
+                </div>
 
-            {/* Section Selection - FIXED FOR Z-INDEX */}
-            <Card className="overflow-visible">
-                <CardContent className="pt-6 space-y-4 overflow-visible">
-                    <div className="space-y-2">
-                        <Label htmlFor="section">Select Section *</Label>
-                        <div className="relative z-50">
-                            <Select
-                                value={String(localData.sectionId || '')}
-                                onValueChange={(value) => handleChange('sectionId', parseInt(value))}
+                <div className="space-y-3">
+                    {submissionRequirements.map((requirement) => (
+                        <div key={requirement.id} className="flex items-start space-x-3">
+                            <Checkbox
+                                id={requirement.id}
+                                checked={localData[requirement.field as keyof WizardStep1Data] as boolean || false}
+                                onCheckedChange={(checked) =>
+                                    handleChange(requirement.field, checked)
+                                }
+                                className="mt-0.5"
+                            />
+                            <Label
+                                htmlFor={requirement.id}
+                                className="cursor-pointer font-normal text-sm leading-relaxed"
                             >
-                                <SelectTrigger id="section" className="w-full">
-                                    <SelectValue placeholder="Choose a section for your submission" />
-                                </SelectTrigger>
-                                <SelectContent
-                                    className="z-[9999]"
-                                    position="popper"
-                                    side="bottom"
-                                    align="start"
-                                    sideOffset={5}
-                                    avoidCollisions={false}
-                                >
-                                    <div className="max-h-[300px] overflow-auto">
-                                        {sections.map((section) => (
-                                            <SelectItem key={section.id} value={String(section.id)}>
-                                                {section.title}
-                                            </SelectItem>
-                                        ))}
-                                        {sections.length === 0 && (
-                                            <SelectItem value="0" disabled>
-                                                No sections available
-                                            </SelectItem>
-                                        )}
-                                    </div>
-                                </SelectContent>
-                            </Select>
+                                {requirement.text}
+                            </Label>
                         </div>
-                        <p className="text-xs text-muted-foreground">
-                            Select the appropriate section for your manuscript type
-                        </p>
+                    ))}
+                </div>
+            </div>
+
+            {/* Comments for the Editor */}
+            <div className="space-y-2">
+                <Label htmlFor="comments" className="text-base font-semibold">
+                    Comments for the Editor
+                </Label>
+                <div className="border rounded-md">
+                    {/* Toolbar */}
+                    <div className="flex items-center gap-1 p-2 border-b bg-muted/30">
+                        <button
+                            type="button"
+                            className="p-1.5 hover:bg-muted rounded"
+                            title="Paste from Word"
+                        >
+                            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                            </svg>
+                        </button>
+                        <button
+                            type="button"
+                            className="p-1.5 hover:bg-muted rounded"
+                            title="Paste from Plain Text"
+                        >
+                            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                            </svg>
+                        </button>
+                        <div className="w-px h-6 bg-border mx-1" />
+                        <button
+                            type="button"
+                            className="p-1.5 hover:bg-muted rounded font-bold"
+                            title="Bold"
+                        >
+                            B
+                        </button>
+                        <button
+                            type="button"
+                            className="p-1.5 hover:bg-muted rounded italic"
+                            title="Italic"
+                        >
+                            I
+                        </button>
+                        <button
+                            type="button"
+                            className="p-1.5 hover:bg-muted rounded underline"
+                            title="Underline"
+                        >
+                            U
+                        </button>
+                        <div className="w-px h-6 bg-border mx-1" />
+                        <button
+                            type="button"
+                            className="p-1.5 hover:bg-muted rounded"
+                            title="Insert Link"
+                        >
+                            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13.828 10.172a4 4 0 00-5.656 0l-4 4a4 4 0 105.656 5.656l1.102-1.101m-.758-4.899a4 4 0 005.656 0l4-4a4 4 0 00-5.656-5.656l-1.1 1.1" />
+                            </svg>
+                        </button>
+                        <button
+                            type="button"
+                            className="p-1.5 hover:bg-muted rounded"
+                            title="Remove Link"
+                        >
+                            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 14l2-2m0 0l2-2m-2 2l-2-2m2 2l2 2m7-2a9 9 0 11-18 0 9 9 0 0118 0z" />
+                            </svg>
+                        </button>
+                        <div className="w-px h-6 bg-border mx-1" />
+                        <button
+                            type="button"
+                            className="p-1.5 hover:bg-muted rounded"
+                            title="Insert Special Character"
+                        >
+                            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 8h10M7 12h4m1 8l-4-4H5a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v8a2 2 0 01-2 2h-3l-4 4z" />
+                            </svg>
+                        </button>
+                        <button
+                            type="button"
+                            className="p-1.5 hover:bg-muted rounded"
+                            title="Fullscreen"
+                        >
+                            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 8V4m0 0h4M4 4l5 5m11-1V4m0 0h-4m4 0l-5 5M4 16v4m0 0h4m-4 0l5-5m11 5l-5-5m5 5v-4m0 4h-4" />
+                            </svg>
+                        </button>
+                        <button
+                            type="button"
+                            className="p-1.5 hover:bg-muted rounded"
+                            title="Insert Image"
+                        >
+                            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                            </svg>
+                        </button>
+                        <button
+                            type="button"
+                            className="p-1.5 hover:bg-muted rounded"
+                            title="Download"
+                        >
+                            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
+                            </svg>
+                        </button>
                     </div>
-                </CardContent>
-            </Card>
+                    {/* Textarea */}
+                    <Textarea
+                        id="comments"
+                        placeholder=""
+                        value={localData.commentsForEditor || ''}
+                        onChange={(e) => handleChange('commentsForEditor', e.target.value)}
+                        rows={6}
+                        className="resize-none border-0 rounded-t-none focus-visible:ring-0"
+                    />
+                </div>
+            </div>
 
-            {/* Submission Checklist */}
-            <Card>
-                <CardContent className="pt-6 space-y-4">
-                    <h3 className="font-semibold text-lg mb-4">Submission Checklist</h3>
+            {/* Acknowledge the copyright statement */}
+            <div className="space-y-4">
+                <h3 className="text-base font-semibold">Acknowledge the copyright statement</h3>
 
-                    <div className="space-y-4">
-                        {/* Requirement 1 */}
-                        <div className="flex items-start space-x-3">
-                            <Checkbox
-                                id="req1"
-                                checked={localData.submissionRequirements || false}
-                                onCheckedChange={(checked) =>
-                                    handleChange('submissionRequirements', checked)
-                                }
-                                className="mt-1"
-                            />
-                            <div className="flex-1">
-                                <Label htmlFor="req1" className="cursor-pointer font-medium">
-                                    Submission Requirements
-                                </Label>
-                                <p className="text-sm text-muted-foreground mt-1">
-                                    The submission has not been previously published, nor is it before another
-                                    journal for consideration.
-                                </p>
-                            </div>
-                        </div>
+                <div className="rounded-lg border bg-muted/50 p-4">
+                    <h4 className="font-semibold mb-2">Copyright Notice</h4>
+                    <p className="text-sm text-muted-foreground leading-relaxed">
+                        Authors who publish with this journal agree to the following terms: Authors retain copyright
+                        and grant the journal right of first publication with the work simultaneously licensed under
+                        a Creative Commons Attribution License that allows others to share the work with an acknowledgement
+                        of the work's authorship and initial publication in this journal.
+                    </p>
+                </div>
 
-                        {/* Requirement 2 */}
-                        <div className="flex items-start space-x-3">
-                            <Checkbox
-                                id="req2"
-                                checked={localData.copyrightNotice || false}
-                                onCheckedChange={(checked) =>
-                                    handleChange('copyrightNotice', checked)
-                                }
-                                className="mt-1"
-                            />
-                            <div className="flex-1">
-                                <Label htmlFor="req2" className="cursor-pointer font-medium">
-                                    Copyright Notice
-                                </Label>
-                                <p className="text-sm text-muted-foreground mt-1">
-                                    I agree that the copyright for this article will be transferred to the
-                                    publisher if the article is accepted for publication.
-                                </p>
-                            </div>
-                        </div>
-
-                        {/* Requirement 3 */}
-                        <div className="flex items-start space-x-3">
-                            <Checkbox
-                                id="req3"
-                                checked={localData.privacyStatement || false}
-                                onCheckedChange={(checked) =>
-                                    handleChange('privacyStatement', checked)
-                                }
-                                className="mt-1"
-                            />
-                            <div className="flex-1">
-                                <Label htmlFor="req3" className="cursor-pointer font-medium">
-                                    Privacy Statement
-                                </Label>
-                                <p className="text-sm text-muted-foreground mt-1">
-                                    The names and email addresses entered will be used exclusively for the stated
-                                    purposes of this journal and will not be made available for any other purpose.
-                                </p>
-                            </div>
-                        </div>
-                    </div>
-
-                    {/* Comments for Editor */}
-                    <div className="pt-4 border-t">
-                        <Label htmlFor="comments">Comments for the Editor (Optional)</Label>
-                        <Textarea
-                            id="comments"
-                            placeholder="Enter any comments you wish to share with the editor..."
-                            value={localData.commentsForEditor || ''}
-                            onChange={(e) => handleChange('commentsForEditor', e.target.value)}
-                            rows={4}
-                            className="mt-2"
+                <div className="space-y-3">
+                    <div className="flex items-start space-x-3">
+                        <Checkbox
+                            id="copyright"
+                            checked={localData.copyrightNotice || false}
+                            onCheckedChange={(checked) =>
+                                handleChange('copyrightNotice', checked)
+                            }
+                            className="mt-0.5"
                         />
+                        <Label
+                            htmlFor="copyright"
+                            className="cursor-pointer font-normal text-sm"
+                        >
+                            Yes, I agree to abide by the terms of the copyright statement.
+                        </Label>
                     </div>
-                </CardContent>
-            </Card>
+
+                    <div className="flex items-start space-x-3">
+                        <Checkbox
+                            id="privacy"
+                            checked={localData.privacyStatement || false}
+                            onCheckedChange={(checked) =>
+                                handleChange('privacyStatement', checked)
+                            }
+                            className="mt-0.5"
+                        />
+                        <Label
+                            htmlFor="privacy"
+                            className="cursor-pointer font-normal text-sm"
+                        >
+                            Yes, I agree to have my data collected and stored according to the{' '}
+                            <span className="text-primary underline">privacy statement</span>.
+                        </Label>
+                    </div>
+                </div>
+            </div>
 
             {/* Validation Alert */}
             {errors && (
@@ -193,11 +272,11 @@ export function WizardStep1Start({ data, onChange, errors }: WizardStep1Props) {
             )}
 
             {/* Progress Indicator */}
-            {allChecked && localData.sectionId && (
-                <Alert>
+            {allChecked && (
+                <Alert className="border-green-200 bg-green-50">
                     <CheckCircle2 className="h-4 w-4 text-green-600" />
-                    <AlertDescription className="text-green-600">
-                        Great! You've completed all requirements. Click "Next" to continue.
+                    <AlertDescription className="text-green-700">
+                        Great! You've completed all requirements. Click "Save and continue" to proceed to the next step.
                     </AlertDescription>
                 </Alert>
             )}

@@ -78,7 +78,7 @@ export async function POST(
     // OJS-style: revisions are requested via an editorial decision, while submission status remains QUEUED.
     // Legacy fallback: some schemas store a string status 'revision_required'.
     const statusVal: any = submission.status;
-    const isLegacyRevisionRequired = statusVal === "revision_required";
+    const isLegacyRevisionRequired = statusVal === "revision_required" || statusVal === "revisions_required";
     const isLegacyUnderReview = statusVal === "under_review";
     const isOjsQueued = statusVal === STATUS_QUEUED;
 
@@ -96,7 +96,7 @@ export async function POST(
       if (
         !decErr &&
         latestDecision?.decision ===
-          SUBMISSION_EDITOR_DECISION_PENDING_REVISIONS
+        SUBMISSION_EDITOR_DECISION_PENDING_REVISIONS
       ) {
         latestDecisionIsRevisions = true;
       }

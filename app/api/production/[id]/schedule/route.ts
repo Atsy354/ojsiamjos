@@ -1,23 +1,16 @@
 import { NextRequest, NextResponse } from "next/server"
 import { createClient } from "@/lib/supabase/server"
-import { requireEditor } from "@/lib/middleware/auth"
+import { withEditor, errorResponse, successResponse } from "@/lib/api/middleware"
 import { logger } from "@/lib/utils/logger"
 import { STATUS_SCHEDULED, STATUS_QUEUED } from "@/lib/workflow/ojs-constants"
 
-export async function POST(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
+export const POST = withEditor(async (request, { params }, { user }) => {
   const startTime = Date.now()
 
   try {
-    const { id } = await params
-    const submissionIdNum = parseInt(id, 10)
+    const submissionIdNum = parseInt(params.id, 10)
     if (Number.isNaN(submissionIdNum)) {
-      return NextResponse.json({ error: "Invalid submission id" }, { status: 400 })
-    }
-
-    const { authorized, user, error: authError } = await requireEditor(request)
-    if (!authorized) {
-      logger.apiError("/api/production/[id]/schedule", "POST", authError)
-      return NextResponse.json({ error: authError || "Forbidden" }, { status: 403 })
+      return errorResponse("Invalid submission id", 400)
     }
 
     logger.apiRequest("/api/production/[id]/schedule", "POST", user?.id)
@@ -26,7 +19,7 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
     const { issueId, publicationDate, seq } = body
 
     if (!issueId || !publicationDate) {
-      return NextResponse.json({ error: "issueId and publicationDate are required" }, { status: 400 })
+      return errorResponse("issueId and publicationDate are required", 400)
     }
 
     const supabase = await createClient()
@@ -49,7 +42,7 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
 
     if (pubErr) {
       logger.apiError("/api/production/[id]/schedule", "POST", pubErr, user?.id)
-      return NextResponse.json({ error: pubErr.message }, { status: 500 })
+      return errorResponse(pubErr.message, 500)
     }
 
     // Update submission status to scheduled (try numeric first, fallback to string)
@@ -86,9 +79,9 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
     const duration = Date.now() - startTime
     logger.apiResponse("/api/production/[id]/schedule", "POST", 200, duration, user?.id)
 
-    return NextResponse.json({ success: true, publication: pub })
+    return successResponse({ success: true, publication: pub })
   } catch (error) {
     logger.apiError("/api/production/[id]/schedule", "POST", error)
-    return NextResponse.json({ error: "Internal server error" }, { status: 500 })
+    return errorResponse("Internal server error", 500)
   }
-}
+})

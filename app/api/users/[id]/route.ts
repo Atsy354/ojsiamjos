@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server"
 import { createClient } from "@/lib/supabase/server"
+import { withAdmin, errorResponse, successResponse } from "@/lib/api/middleware"
 import { requireAdmin, requireAuth } from "@/lib/middleware/auth"
 
 export async function GET(
@@ -72,25 +73,17 @@ export async function PATCH(
   }
 }
 
-export async function DELETE(
-  request: NextRequest,
-  { params }: { params: { id: string } }
-) {
+export const DELETE = withAdmin(async (request, { params }, { user }) => {
   try {
-    const { authorized, error: authError } = await requireAdmin(request)
-    if (!authorized) {
-      return NextResponse.json({ error: authError || "Forbidden" }, { status: 403 })
-    }
-
     const supabase = await createClient()
     const { error } = await supabase
       .from("users")
       .delete()
       .eq("id", params.id)
 
-    if (error) return NextResponse.json({ error: error.message }, { status: 500 })
-    return NextResponse.json({ success: true })
+    if (error) return errorResponse(error.message, 500)
+    return successResponse({ success: true })
   } catch (error) {
-    return NextResponse.json({ error: "Internal server error" }, { status: 500 })
+    return errorResponse("Internal server error", 500)
   }
-}
+})
