@@ -614,44 +614,55 @@ export function Sidebar({ isOpen, onClose }: SidebarProps) {
           {isLoading ? (
             <SkeletonSidebar />
           ) : (
-            <nav className="space-y-1">
-              {filteredSections.map((section) => (
-                <div key={section.id}>
-                  {collapsed ? (
-                    <div className="space-y-1">
-                      {section.items.map((item) => (
-                        <Tooltip key={item.title}>
-                          <TooltipTrigger asChild>
-                            <Link
-                              href={item.href}
-                              onClick={onClose}
-                              className={cn(
-                                "flex h-9 w-9 items-center justify-center rounded-md mx-auto transition-colors",
-                                isItemActive(item.href)
-                                  ? "bg-sidebar-primary text-sidebar-primary-foreground"
-                                  : "text-sidebar-foreground/70 hover:bg-sidebar-accent hover:text-sidebar-foreground",
-                              )}
-                            >
-                              <item.icon className="h-4 w-4" />
-                            </Link>
-                          </TooltipTrigger>
-                          <TooltipContent side="right" className="font-medium">
-                            {item.title}
-                          </TooltipContent>
-                        </Tooltip>
-                      ))}
-                    </div>
-                  ) : (
-                    <CollapsibleSection
-                      section={section}
-                      isOpen={openSections.has(section.id)}
-                      onToggle={() => toggleSection(section.id)}
-                      pathname={pathname}
-                      onClose={onClose}
-                    />
-                  )}
-                </div>
-              ))}
+            <nav className="space-y-0.5">
+              {/* OJS 3.3 Style: Flat list without collapsible sections */}
+              {filteredSections.flatMap((section) =>
+                section.items.map((item) => {
+                  const isActive = isItemActive(item.href)
+
+                  if (collapsed) {
+                    return (
+                      <Tooltip key={item.title}>
+                        <TooltipTrigger asChild>
+                          <Link
+                            href={item.href}
+                            onClick={onClose}
+                            className={cn(
+                              "flex h-9 w-9 items-center justify-center rounded-md mx-auto transition-colors",
+                              isActive
+                                ? "bg-sidebar-primary text-sidebar-primary-foreground"
+                                : "text-sidebar-foreground/70 hover:bg-sidebar-accent hover:text-sidebar-foreground",
+                            )}
+                          >
+                            <item.icon className="h-4 w-4" />
+                          </Link>
+                        </TooltipTrigger>
+                        <TooltipContent side="right" className="font-medium">
+                          {item.title}
+                        </TooltipContent>
+                      </Tooltip>
+                    )
+                  }
+
+                  return (
+                    <Link
+                      key={item.title}
+                      href={item.href}
+                      onClick={onClose}
+                      className={cn(
+                        "flex items-center gap-2.5 rounded-md px-2.5 py-2 text-sm transition-colors",
+                        isActive
+                          ? "bg-sidebar-primary text-sidebar-primary-foreground font-medium"
+                          : "text-sidebar-foreground/80 hover:bg-sidebar-accent hover:text-sidebar-foreground",
+                      )}
+                    >
+                      <item.icon className="h-4 w-4 shrink-0" />
+                      <span className="truncate">{item.title}</span>
+                      {isActive && <ChevronRight className="h-3 w-3 ml-auto shrink-0 opacity-60" />}
+                    </Link>
+                  )
+                })
+              )}
             </nav>
           )}
         </ScrollArea>
