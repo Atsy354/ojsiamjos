@@ -63,7 +63,7 @@ export function useAuth() {
 
   const logout = useCallback(() => {
     fetch("/api/auth/logout", { method: "POST" })
-      .catch(() => {})
+      .catch(() => { })
       .finally(() => {
         setUser(null)
         setCurrentJournal(null)
@@ -86,14 +86,15 @@ export function useAuth() {
 
   const isAdmin = user?.roles.includes("admin") ?? false
   const isManager = user?.roles.includes("manager") ?? false
-  const isEditor = user?.roles.includes("editor") ?? false
+  // FIXED: Admin should have editorial access
+  const isEditor = (user?.roles.includes("editor") || user?.roles.includes("admin") || user?.roles.includes("manager")) ?? false
   const isAuthor = user?.roles.includes("author") ?? false
   const isReviewer = user?.roles.includes("reviewer") ?? false
 
   // Manager OR Admin has full access
   const isManagerOrAdmin = isManager || isAdmin
-  // Manager OR Editor has editorial access
-  const isManagerOrEditor = isManager || isEditor
+  // Manager OR Editor OR Admin has editorial access
+  const isManagerOrEditor = isManager || isEditor || isAdmin
 
   return {
     user,

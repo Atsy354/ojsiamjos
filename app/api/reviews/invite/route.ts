@@ -68,8 +68,49 @@ export async function POST(request: NextRequest) {
             return NextResponse.json({ error: dbError.message }, { status: 500 })
         }
 
-        // TODO: Send email notification to reviewer
-        // await sendReviewInvitationEmail(reviewerId, submissionId, message)
+        // Send email notification to reviewer
+        try {
+            const { sendEmail } = await import('@/lib/email/sender')
+
+            // Get submission details
+            const { data: submission } = await supabase
+                .from('submissions')
+                .select('title, id')
+                .eq('id', submissionId)
+                .single()
+
+            // Get reviewer details (already in assignment.reviewer from select above)
+            const reviewer = (assignment as any).reviewer
+
+            if (reviewer?.email && submission) {
+                const baseUrl = process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000'
+                const reviewerName = `${reviewer.first_name} ${reviewer.last_name}`.trim() || reviewer.email
+
+                await sendEmail({
+                    to: reviewer.email,
+                    subject: 'Review Invitation',
+                    template: 'review-assignment',
+                    data: {
+                        reviewerName,
+                        submissionTitle: submission.title,
+                        submissionId: submission.id,
+                        dueDate: dueDate || 'Not specified',
+                        message: message || '',
+                        acceptUrl: `${baseUrl}/reviews/${assignment.id}/respond?action=accept`,
+                        declineUrl: `${baseUrl}/reviews/${assignment.id}/respond?action=decline`,
+                        journalName: process.env.NEXT_PUBLIC_JOURNAL_NAME || 'Journal'
+                    }
+                })
+
+                logger.info('Review invitation email sent', {
+                    reviewerEmail: reviewer.email
+                }, { userId: user?.id })
+            }
+        } catch (emailError) {
+            // Log but don't fail the assignment if email fails
+            logger.error('Failed to send review invitation email', emailError)
+        }
+
 
         const duration = Date.now() - startTime
         logger.apiResponse('/api/reviews/invite', 'POST', 201, duration, user?.id)

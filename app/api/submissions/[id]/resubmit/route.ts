@@ -44,7 +44,7 @@ export async function POST(
 
     const { data: submission, error: submissionError } = await supabase
       .from("submissions")
-      .select("id, submitter_id, status, stage_id")
+      .select("id, submitter_id, status, stage_id, revision_deadline")
       .eq("id", submissionIdNum)
       .maybeSingle();
 
@@ -82,29 +82,55 @@ export async function POST(
     const isLegacyUnderReview = statusVal === "under_review";
     const isOjsQueued = statusVal === STATUS_QUEUED;
 
-    let latestDecisionIsRevisions = false;
-    if (isOjsQueued) {
-      // Check latest editorial decision for this submission
-      const { data: latestDecision, error: decErr } = await supabase
-        .from("editorial_decisions")
-        .select("decision, date_decided")
-        .eq("submission_id", submissionIdNum)
-        .order("date_decided", { ascending: false })
-        .limit(1)
-        .maybeSingle();
+    // Check revision_deadline from submission data
+    const hasRevisionDeadline = !!(submission.revision_deadline || (submission as any).revisionDeadline);
 
-      if (
-        !decErr &&
-        latestDecision?.decision ===
-        SUBMISSION_EDITOR_DECISION_PENDING_REVISIONS
-      ) {
+    // IMPROVED: Always check editorial decisions as source of truth
+    let latestDecisionIsRevisions = false;
+    let latestDecisionData: any = null;
+
+    const { data: latestDecision, error: decErr } = await supabase
+      .from("editorial_decisions")
+      .select("decision, date_decided, round")
+      .eq("submission_id", submissionIdNum)
+      .order("date_decided", { ascending: false })
+      .limit(1)
+      .maybeSingle();
+
+    if (!decErr && latestDecision) {
+      latestDecisionData = latestDecision;
+      if (latestDecision.decision === SUBMISSION_EDITOR_DECISION_PENDING_REVISIONS) {
         latestDecisionIsRevisions = true;
       }
     }
 
-    // Idempotency: if already resubmitted, do not fail the client.
-    if (!isLegacyRevisionRequired && !latestDecisionIsRevisions) {
+    // Check if revision was already submitted (idempotency)
+    // If latest decision is "revisions required" but revision_deadline is null,
+    // it might mean revision was already submitted
+    const possiblyAlreadyResubmitted = latestDecisionIsRevisions && !hasRevisionDeadline;
+
+    // DEBUG: Log detailed validation state
+    logger.info('Revision validation check', {
+      submissionId: submissionIdNum,
+      statusVal,
+      isOjsQueued,
+      isLegacyRevisionRequired,
+      hasRevisionDeadline,
+      latestDecisionIsRevisions,
+      latestDecisionData,
+      possiblyAlreadyResubmitted
+    });
+
+    // Validation logic:
+    // 1. Legacy status check (backward compatibility)
+    // 2. Has revision_deadline set (most reliable indicator)
+    // 3. Latest editorial decision is "revisions required"
+    const isRevisionRequested = isLegacyRevisionRequired || hasRevisionDeadline || latestDecisionIsRevisions;
+
+    if (!isRevisionRequested) {
+      // Not in revision state at all
       if (isLegacyUnderReview) {
+        // Already resubmitted and back under review
         const duration = Date.now() - startTime;
         logger.apiResponse(
           "/api/submissions/[id]/resubmit",
@@ -118,104 +144,67 @@ export async function POST(
           { status: 200 }
         );
       }
+
+      logger.error('Revision validation failed - not in revision state', {
+        submissionId: submissionIdNum,
+        statusVal,
+        isLegacyRevisionRequired,
+        latestDecisionIsRevisions,
+        hasRevisionDeadline,
+        latestDecisionData
+      });
+
       return NextResponse.json(
-        { error: "Submission is not in a revisions-requested state" },
+        {
+          error: "Submission is not in a revisions-requested state",
+          details: {
+            status: statusVal,
+            hasRevisionDeadline,
+            latestDecision: latestDecisionData?.decision || 'none',
+            hint: "Editor must request revisions before author can resubmit"
+          }
+        },
         { status: 400 }
       );
     }
 
-    const { data: lastRound } = await supabase
-      .from("review_rounds")
-      .select("round")
-      .eq("submission_id", submissionIdNum)
-      .order("round", { ascending: false })
-      .limit(1)
-      .maybeSingle();
-
-    const nextRound = (lastRound?.round || 1) + 1;
-
-    const { data: newRound, error: newRoundError } = await writeClient
-      .from("review_rounds")
-      .insert({
-        submission_id: submissionIdNum,
-        stage_id: WORKFLOW_STAGE_ID_EXTERNAL_REVIEW,
-        round: nextRound,
-        status: 6,
-        date_created: new Date().toISOString(),
-        date_modified: new Date().toISOString(),
-      })
-      .select()
-      .single();
-
-    if (newRoundError) {
-      if (
-        !hasServiceRole &&
-        String((newRoundError as any)?.code || "").trim() === "42501"
-      ) {
-        return NextResponse.json(
-          {
-            error:
-              "RLS blocked workflow audit log. Configure SUPABASE_SERVICE_ROLE_KEY and restart dev server.",
-            details: newRoundError.message,
-          },
-          { status: 500 }
-        );
-      }
-      logger.apiError(
-        "/api/submissions/[id]/resubmit",
-        "POST",
-        newRoundError,
-        user?.id
-      );
-      return NextResponse.json(
-        { error: newRoundError.message },
-        { status: 500 }
-      );
-    }
-
-    const updateBase: any = {
-      status: STATUS_QUEUED,
-      stage_id: WORKFLOW_STAGE_ID_EXTERNAL_REVIEW,
-      date_status_modified: new Date().toISOString(),
-      date_last_activity: new Date().toISOString(),
-    };
-
-    // Some schemas don't include current_round/currentRound; retry without if it fails.
-    const attemptUpdate = async (payload: any) => {
-      return writeClient
-        .from("submissions")
-        .update(payload)
-        .eq("id", submissionIdNum)
-        .select("*")
-        .single();
-    };
-
-    let updatedResp = await attemptUpdate({
-      ...updateBase,
-      current_round: nextRound,
-    });
-    if (updatedResp.error) {
-      // Try alternate column naming used by some code paths
-      updatedResp = await attemptUpdate({
-        ...updateBase,
-        currentRound: nextRound,
+    // If we reach here, revision is requested
+    // Check for idempotency: if deadline is already cleared but decision exists, allow re-submission
+    if (possiblyAlreadyResubmitted) {
+      logger.info('Possible duplicate revision submission detected, allowing idempotent resubmit', {
+        submissionId: submissionIdNum,
+        userId: user?.id
       });
     }
-    if (updatedResp.error) {
-      // Final fallback: update without round columns
-      updatedResp = await attemptUpdate(updateBase);
-    }
 
-    if (updatedResp.error) {
+    // FIXED: Don't create new review round on revision submit!
+    // Only editor should create new rounds via "Send to Reviewer Again"
+    // Here we just update the submission timestamp and clear revision_deadline
+
+    const updatePayload: any = {
+      date_last_activity: new Date().toISOString(),
+      date_status_modified: new Date().toISOString(),
+      // Clear revision_deadline since revision was submitted
+      revision_deadline: null
+    };
+
+    const { data: updated, error: updateError } = await writeClient
+      .from("submissions")
+      .update(updatePayload)
+      .eq("id", submissionIdNum)
+      .select("*")
+      .single();
+
+    if (updateError) {
       if (
         !hasServiceRole &&
-        String((updatedResp.error as any)?.code || "").trim() === "42501"
+        String((updateError as any)?.code || "").trim() === "42501"
       ) {
         return NextResponse.json(
           {
             error:
               "RLS blocked workflow audit log. Configure SUPABASE_SERVICE_ROLE_KEY and restart dev server.",
-            details: updatedResp.error.message,
+            details: updateError.message,
           },
           { status: 500 }
         );
@@ -223,16 +212,66 @@ export async function POST(
       logger.apiError(
         "/api/submissions/[id]/resubmit",
         "POST",
-        updatedResp.error,
+        updateError,
         user?.id
       );
       return NextResponse.json(
-        { error: updatedResp.error.message },
+        { error: updateError.message },
         { status: 500 }
       );
     }
 
-    const updated = updatedResp.data;
+    // Send email notification to editor about revision submission
+    try {
+      const { sendEmail } = await import('@/lib/email/sender')
+
+      // Get editor(s) assigned to this submission
+      const { data: stageAssignments } = await supabase
+        .from('stage_assignments')
+        .select('user_id, users!stage_assignments_user_id_fkey(email, first_name, last_name)')
+        .eq('submission_id', submissionIdNum)
+        .eq('stage_id', WORKFLOW_STAGE_ID_EXTERNAL_REVIEW)
+
+      // Get submission details
+      const { data: submissionDetails } = await supabase
+        .from('submissions')
+        .select('title')
+        .eq('id', submissionIdNum)
+        .single()
+
+      if (stageAssignments && stageAssignments.length > 0 && submissionDetails) {
+        const baseUrl = process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000'
+
+        for (const assignment of stageAssignments) {
+          const editor = (assignment as any).users
+          if (editor?.email) {
+            const editorName = `${editor.first_name} ${editor.last_name}`.trim() || editor.email
+
+            await sendEmail({
+              to: editor.email,
+              subject: 'Revision Submitted',
+              template: 'review-submitted',
+              data: {
+                reviewerName: editorName,
+                submissionTitle: submissionDetails.title,
+                submissionId: submissionIdNum,
+                recommendation: 'Revision Submitted',
+                submissionUrl: `${baseUrl}/submissions/${submissionIdNum}`,
+                journalName: process.env.NEXT_PUBLIC_JOURNAL_NAME || 'Journal'
+              }
+            })
+
+            logger.info('Revision submitted email sent to editor', {
+              editorEmail: editor.email
+            }, { userId: user?.id })
+          }
+        }
+      }
+    } catch (emailError) {
+      // Log but don't fail the submission if email fails
+      logger.error('Failed to send revision submitted email', emailError)
+    }
+
 
     const duration = Date.now() - startTime;
     logger.apiResponse(
@@ -242,10 +281,17 @@ export async function POST(
       duration,
       user?.id
     );
+
+    logger.info('Revision submitted successfully', {
+      submissionId: submissionIdNum,
+      userId: user?.id,
+      revisionDeadlineCleared: true
+    });
+
     return NextResponse.json({
       success: true,
-      round: newRound,
       submission: updated,
+      message: "Revision submitted successfully. Editor has been notified."
     });
   } catch (error: any) {
     logger.apiError("/api/submissions/[id]/resubmit", "POST", error);
