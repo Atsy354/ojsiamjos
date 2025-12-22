@@ -116,50 +116,22 @@ export default function SubmissionsPage() {
       <Tabs defaultValue={defaultTab} className="space-y-4">
         <TabsList className="w-full overflow-x-auto whitespace-nowrap justify-start">
           <TabsTrigger value="all">
-            My Queue
-            <Badge variant="secondary" className="ml-2 rounded-full">
-              {unassigned.length + inReview.length + copyediting.length + production.length + archives.length}
-            </Badge>
+            My Queue {unassigned.length + inReview.length + copyediting.length + production.length + archives.length}
           </TabsTrigger>
           <TabsTrigger value="unassigned">
-            Unassigned
-            {unassigned.length > 0 && (
-              <Badge variant="secondary" className="ml-2 rounded-full">
-                {unassigned.length}
-              </Badge>
-            )}
+            Unassigned {unassigned.length}
           </TabsTrigger>
           <TabsTrigger value="review">
-            Active
-            {inReview.length > 0 && (
-              <Badge variant="secondary" className="ml-2 rounded-full">
-                {inReview.length}
-              </Badge>
-            )}
+            Active {inReview.length}
           </TabsTrigger>
           <TabsTrigger value="copyediting">
-            Copyediting
-            {copyediting.length > 0 && (
-              <Badge variant="secondary" className="ml-2 rounded-full">
-                {copyediting.length}
-              </Badge>
-            )}
+            Copyediting {copyediting.length}
           </TabsTrigger>
           <TabsTrigger value="production">
-            Production
-            {production.length > 0 && (
-              <Badge variant="secondary" className="ml-2 rounded-full">
-                {production.length}
-              </Badge>
-            )}
+            Production {production.length}
           </TabsTrigger>
           <TabsTrigger value="archives">
-            Archive
-            {archives.length > 0 && (
-              <Badge variant="secondary" className="ml-2 rounded-full">
-                {archives.length}
-              </Badge>
-            )}
+            Archive {archives.length}
           </TabsTrigger>
         </TabsList>
 
