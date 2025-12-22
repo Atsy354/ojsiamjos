@@ -274,12 +274,12 @@ export function EditorialDecisionPanel({
                     <div className="space-y-3">
                         <Label className="text-base font-medium">Decision *</Label>
                         <RadioGroup value={decision} onValueChange={setDecision} className="space-y-3">
-                            <div className="flex items-center space-x-3 rounded-lg border p-4 hover:bg-accent/50 transition-colors">
+                            <div className="flex items-center space-x-3 rounded-lg border border-blue-200 bg-blue-50 p-4 hover:bg-blue-100 transition-colors">
                                 <RadioGroupItem value="accept" id="accept" />
                                 <Label htmlFor="accept" className="cursor-pointer font-normal flex-1 flex items-center gap-2">
-                                    <CheckCircle2 className="h-4 w-4 text-green-600" />
-                                    <span>Accept Submission</span>
-                                    <span className="text-sm text-muted-foreground ml-auto">→ Move to Copyediting</span>
+                                    <CheckCircle2 className="h-4 w-4 text-blue-600" />
+                                    <span className="text-blue-900">Accept Submission</span>
+                                    <span className="text-sm text-blue-700 ml-auto">→ Move to Copyediting</span>
                                 </Label>
                             </div>
 
