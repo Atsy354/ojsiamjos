@@ -264,12 +264,6 @@ export function Sidebar({ isOpen, onClose }: SidebarProps) {
             icon: BookMarked,
             roles: ["admin", "manager", "editor"], // Manager and Editor
           },
-          {
-            title: "Archives",
-            href: journalPath ? `${ROUTES.journalSubmissions(journalPath)}?stage=archives` : `${ROUTES.SUBMISSIONS}?stage=archives`,
-            icon: Archive,
-            roles: ["admin", "manager", "editor"], // Manager and Editor
-          },
         ],
       },
       {
