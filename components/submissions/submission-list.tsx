@@ -24,9 +24,7 @@ export function SubmissionList({ submissions, onDelete, showCreateButton = true 
   const [statusFilter, setStatusFilter] = useState<string>("all")
   const [viewMode, setViewMode] = useState<"grid" | "list">("list")
 
-  const newSubmissionHref = useMemo(() => {
-    return currentJournal?.path ? `/j/${currentJournal.path}/submissions/new` : "/submissions/new"
-  }, [currentJournal?.path])
+  const newSubmissionHref = "/submissions/new"
 
   const filteredSubmissions = submissions.filter((sub) => {
     const matchesSearch =
@@ -136,9 +134,9 @@ export function SubmissionList({ submissions, onDelete, showCreateButton = true 
                 const updated = (s as any)?.updatedAt || (s as any)?.dateLastActivity || (s as any)?.dateSubmitted || "-"
                 const detailHref = `/submissions/${s.id}`
                 const statusColors = getSubmissionStatusColors(s.status, s.stageId)
-                const statusLabel = statusColors.label || 
+                const statusLabel = statusColors.label ||
                   (typeof s.status === "number" ? "In Workflow" : String(s.status).replace("_", " "))
-                
+
                 return (
                   <tr key={s.id} className="border-t">
                     <td className="px-4 py-3">

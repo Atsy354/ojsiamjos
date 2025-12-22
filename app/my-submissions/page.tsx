@@ -19,7 +19,7 @@ function MySubmissionsContent() {
   const statusParam = searchParams?.get("status") || "active"
   const [activeTab, setActiveTab] = useState(statusParam)
   const [mounted, setMounted] = useState(false)
-  
+
   // Fetch all submissions (no filter) untuk count di tab headers
   const { submissions: allSubmissions, deleteSubmission, isLoading } = useSubmissionsAPI(user?.id)
 
@@ -78,7 +78,7 @@ function MySubmissionsContent() {
       return true
     })
   }, [allSubmissions, completeSubmissions, incompleteSubmissions])
-  
+
   // Filter displayed submissions berdasarkan active tab
   const displayedSubmissions = useMemo(() => {
     if (statusParam === "active") return activeSubmissions
@@ -86,7 +86,7 @@ function MySubmissionsContent() {
     if (statusParam === "complete") return completeSubmissions
     return activeSubmissions
   }, [statusParam, activeSubmissions, incompleteSubmissions, completeSubmissions])
-  
+
   const handleDelete = async (id: string) => {
     try {
       await deleteSubmission(id)
@@ -106,9 +106,7 @@ function MySubmissionsContent() {
     )
   }
 
-  const newSubmissionHref = currentJournal?.path
-    ? `/j/${currentJournal.path}/submissions/new`
-    : "/submissions/new"
+  const newSubmissionHref = "/submissions/new"
 
   const handleTabChange = (value: string) => {
     setActiveTab(value)

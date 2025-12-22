@@ -80,7 +80,7 @@ export const ROUTES = {
   browseArticle: (id: string) => `/browse/article/${id}`,
   browseIssue: (id: string) => `/browse/issue/${id}`,
   submission: (id: string) => `/submissions/${id}`,
-  newSubmission: (journalPath?: string) => (journalPath ? `/j/${journalPath}/submissions/new` : "/submissions/new"),
+  newSubmission: (journalPath?: string) => "/submissions/new",
 } as const
 
 // Pagination defaults
