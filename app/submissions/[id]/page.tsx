@@ -45,6 +45,7 @@ import {
   AccordionItem,
   AccordionTrigger,
 } from "@/components/ui/accordion";
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import {
   ArrowLeft,
   Clock,
@@ -55,6 +56,7 @@ import {
   Download,
   FolderOpen,
   MessageSquare,
+  Info,
 } from "lucide-react";
 import Link from "next/link";
 import { format } from "date-fns";
@@ -72,6 +74,7 @@ import {
 import { AuthorRevisionPanel } from "@/components/workflow/author-revision-panel";
 import { AuthorCopyeditingPanel } from "@/components/workflow/author-copyediting-panel";
 import { AuthorProofreadingPanel } from "@/components/workflow/author-proofreading-panel";
+import { ProductionPanel } from "@/components/workflow/production-panel";
 import { WorkflowActions } from "@/components/workflow/workflow-actions";
 import { WithdrawDialog } from "@/components/submissions/withdraw-dialog";
 import { EditorialDecisionPanel } from "@/components/editorial/EditorialDecisionPanel";
@@ -474,7 +477,10 @@ export default function SubmissionDetailPage() {
   const isSubmitter = submission?.submitterId
     ? submission.submitterId === user?.id
     : (submission as any)?.submitter_id === user?.id;
-  const isRevisionRequired = status === "revision_required" || status === "revisions_required";
+
+  // FIXED: Check for revision_deadline instead of status string
+  // When editor requests revisions, revision_deadline is set
+  const isRevisionRequired = !!(submission?.revision_deadline || (submission as any)?.revisionDeadline);
   const isCopyediting = status === "copyediting" ||
     (status === 1 || status === "1") ||
     (submission as any)?.stage_id === 4 ||
@@ -634,29 +640,89 @@ export default function SubmissionDetailPage() {
 
   return (
     <DashboardLayout
-      title="Submission Details"
-      subtitle={`ID: ${String(submissionId).slice(-8)}`}
+      title="Workflow"
+      subtitle=""
     >
       <div className="space-y-6">
-        {/* Header with back button and actions */}
-        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-          <Button variant="ghost" asChild className="justify-start">
-            <Link href="/submissions">
-              <ArrowLeft className="mr-2 h-4 w-4" />
-              Back to Submissions
-            </Link>
-          </Button>
+        {/* OJS 3.3 Style Workflow Header */}
+        <div className="pkpWorkflow__header border-b pb-4">
+          <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
+            {/* Submission Identification: ID / Author / Title */}
+            <div className="flex-1">
+              <h1 className="pkpWorkflow__identification flex flex-wrap items-center gap-2 text-lg font-semibold">
+                {/* Status Badge */}
+                {status === 'published' && (
+                  <Badge variant="default" className="bg-green-600">
+                    Published
+                  </Badge>
+                )}
+                {status === 'declined' && (
+                  <Badge variant="destructive">
+                    Declined
+                  </Badge>
+                )}
 
-          {/* Withdraw button for authors - only show if submission can be withdrawn */}
-          {isSubmitter && status !== "declined" && status !== "published" && (
-            <Button
-              variant="destructive"
-              onClick={() => setWithdrawDialog(true)}
-              disabled={withdrawing}
-            >
-              Withdraw Submission
-            </Button>
-          )}
+                {/* ID */}
+                <span className="pkpWorkflow__identificationId text-muted-foreground">
+                  {submissionId}
+                </span>
+                <span className="pkpWorkflow__identificationDivider text-muted-foreground">/</span>
+
+                {/* Author */}
+                <span className="pkpWorkflow__identificationAuthor text-muted-foreground">
+                  {authors.length > 0 ? authors[0].name || authors[0].email : 'Unknown Author'}
+                </span>
+                <span className="pkpWorkflow__identificationDivider text-muted-foreground">/</span>
+
+                {/* Title */}
+                <span className="pkpWorkflow__identificationTitle">
+                  {title}
+                </span>
+              </h1>
+            </div>
+
+            {/* Action Buttons (OJS 3.3 Style) */}
+            <div className="pkpWorkflow__actions flex flex-wrap gap-2">
+              {/* Back Button */}
+              <Button variant="ghost" size="sm" asChild>
+                <Link href="/submissions">
+                  <ArrowLeft className="mr-2 h-4 w-4" />
+                  Back
+                </Link>
+              </Button>
+
+              {/* View/Preview Button */}
+              {status === 'published' && (
+                <Button size="sm" variant="outline">
+                  View Published
+                </Button>
+              )}
+
+              {/* Activity Log (Editor Only) */}
+              {isEditor && (
+                <Button size="sm" variant="outline">
+                  Activity Log
+                </Button>
+              )}
+
+              {/* Submission Library */}
+              <Button size="sm" variant="outline">
+                Library
+              </Button>
+
+              {/* Withdraw (Author Only) */}
+              {isSubmitter && status !== "declined" && status !== "published" && (
+                <Button
+                  size="sm"
+                  variant="destructive"
+                  onClick={() => setWithdrawDialog(true)}
+                  disabled={withdrawing}
+                >
+                  Withdraw
+                </Button>
+              )}
+            </div>
+          </div>
         </div>
 
         {/* Withdrawal Dialog */}
@@ -714,6 +780,25 @@ export default function SubmissionDetailPage() {
             {isCopyediting && isSubmitter && (
               <AuthorCopyeditingPanel
                 submissionId={String(params.id)}
+                onComplete={async () => {
+                  await refetchSubmission();
+                  setLoadingFiles(true);
+                  try {
+                    const refreshed = await apiGet<any[]>(
+                      `/api/submissions/${params.id}/files?submissionId=${params.id}`
+                    );
+                    setFiles(Array.isArray(refreshed) ? refreshed : []);
+                  } catch {
+                    setFiles([]);
+                  } finally {
+                    setLoadingFiles(false);
+                  }
+                }}
+              />
+            )}
+            {isProduction && isEditor && (
+              <ProductionPanel
+                submissionId={Number(params.id)}
                 onComplete={async () => {
                   await refetchSubmission();
                   setLoadingFiles(true);
@@ -795,27 +880,13 @@ export default function SubmissionDetailPage() {
                 </CardContent>
               </Card>
             )}
-            {/* Title and Abstract */}
+            {/* Abstract and Keywords */}
             <Card>
               <CardHeader>
-                <div className="space-y-1">
-                  <Badge
-                    variant={getStatusBadgeVariant(status)}
-                    className={statusColors?.badge || ""}
-                  >
-                    <Clock className="mr-1 h-3 w-3" />
-                    {statusLabel}
-                  </Badge>
-                  <CardTitle className="text-xl">{title}</CardTitle>
-                </div>
+                <CardTitle className="text-base">Abstract</CardTitle>
               </CardHeader>
               <CardContent className="space-y-4">
-                <div>
-                  <h4 className="mb-2 text-sm font-medium text-muted-foreground">
-                    Abstract
-                  </h4>
-                  <p className="text-sm leading-relaxed">{abstract}</p>
-                </div>
+                <p className="text-sm leading-relaxed">{abstract}</p>
 
                 {keywords.length > 0 && (
                   <div>
