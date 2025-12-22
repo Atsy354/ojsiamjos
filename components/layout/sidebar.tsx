@@ -294,6 +294,21 @@ export function Sidebar({ isOpen, onClose }: SidebarProps) {
         ],
       },
       {
+        id: "announcements",
+        title: "Announcements",
+        icon: Newspaper,
+        defaultOpen: false,
+        roles: ["admin", "manager"], // OJS PKP 3.3: Announcements is Manager and Admin
+        items: [
+          {
+            title: "Announcements",
+            href: journalPath ? `/journal/${journalPath}/announcements` : "/announcements",
+            icon: Newspaper,
+            roles: ["admin", "manager"],
+          },
+        ],
+      },
+      {
         id: "statistics",
         title: "Statistics & Reports",
         icon: BarChart3,
@@ -682,38 +697,6 @@ export function Sidebar({ isOpen, onClose }: SidebarProps) {
                   <p className="text-xs text-muted-foreground">{user?.email}</p>
                 </div>
               </DropdownMenuLabel>
-              <DropdownMenuSeparator />
-              <DropdownMenuLabel className="text-xs text-muted-foreground">Switch Role</DropdownMenuLabel>
-              {isAdmin && (
-                <DropdownMenuItem onClick={() => switchRole("admin")}>
-                  <Shield className="mr-2 h-4 w-4" />
-                  Admin
-                </DropdownMenuItem>
-              )}
-              {(isManager || isAdmin) && (
-                <DropdownMenuItem onClick={() => switchRole("manager")}>
-                  <Settings className="mr-2 h-4 w-4" />
-                  Manager
-                </DropdownMenuItem>
-              )}
-              {(isEditor || isAdmin || isManager) && (
-                <DropdownMenuItem onClick={() => switchRole("editor")}>
-                  <FileText className="mr-2 h-4 w-4" />
-                  Editor
-                </DropdownMenuItem>
-              )}
-              {(isAuthor || isAdmin || isManager) && (
-                <DropdownMenuItem onClick={() => switchRole("author")}>
-                  <Send className="mr-2 h-4 w-4" />
-                  Author
-                </DropdownMenuItem>
-              )}
-              {(isReviewer || isAdmin) && (
-                <DropdownMenuItem onClick={() => switchRole("reviewer")}>
-                  <ClipboardCheck className="mr-2 h-4 w-4" />
-                  Reviewer
-                </DropdownMenuItem>
-              )}
               <DropdownMenuSeparator />
               <DropdownMenuItem onClick={handleLogout} className="text-destructive focus:text-destructive">
                 <LogOut className="mr-2 h-4 w-4" />
