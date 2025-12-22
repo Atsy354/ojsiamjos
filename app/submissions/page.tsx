@@ -8,6 +8,7 @@ import { useSubmissionsAPI } from "@/lib/hooks/use-submissions-api"
 import { useAuth } from "@/lib/hooks/use-auth"
 import { toast } from "sonner"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
+import { Badge } from "@/components/ui/badge"
 import { STATUS_QUEUED, STATUS_PUBLISHED, STATUS_DECLINED } from "@/lib/workflow/ojs-constants"
 import { WORKFLOW_STAGE_ID_SUBMISSION, WORKFLOW_STAGE_ID_EXTERNAL_REVIEW, WORKFLOW_STAGE_ID_EDITING, WORKFLOW_STAGE_ID_PRODUCTION } from "@/lib/workflow/ojs-constants"
 
@@ -114,12 +115,52 @@ export default function SubmissionsPage() {
     <DashboardLayout title="Submissions" subtitle="Manage editorial workflow (OJS stages)">
       <Tabs defaultValue={defaultTab} className="space-y-4">
         <TabsList className="w-full overflow-x-auto whitespace-nowrap justify-start">
-          <TabsTrigger value="all">All ({unassigned.length + inReview.length + copyediting.length + production.length + archives.length})</TabsTrigger>
-          <TabsTrigger value="unassigned">Unassigned ({unassigned.length})</TabsTrigger>
-          <TabsTrigger value="review">In Review ({inReview.length})</TabsTrigger>
-          <TabsTrigger value="copyediting">Copyediting ({copyediting.length})</TabsTrigger>
-          <TabsTrigger value="production">Production ({production.length})</TabsTrigger>
-          <TabsTrigger value="archives">Archives ({archives.length})</TabsTrigger>
+          <TabsTrigger value="all">
+            My Queue
+            <Badge variant="secondary" className="ml-2 rounded-full">
+              {unassigned.length + inReview.length + copyediting.length + production.length + archives.length}
+            </Badge>
+          </TabsTrigger>
+          <TabsTrigger value="unassigned">
+            Unassigned
+            {unassigned.length > 0 && (
+              <Badge variant="secondary" className="ml-2 rounded-full">
+                {unassigned.length}
+              </Badge>
+            )}
+          </TabsTrigger>
+          <TabsTrigger value="review">
+            Active
+            {inReview.length > 0 && (
+              <Badge variant="secondary" className="ml-2 rounded-full">
+                {inReview.length}
+              </Badge>
+            )}
+          </TabsTrigger>
+          <TabsTrigger value="copyediting">
+            Copyediting
+            {copyediting.length > 0 && (
+              <Badge variant="secondary" className="ml-2 rounded-full">
+                {copyediting.length}
+              </Badge>
+            )}
+          </TabsTrigger>
+          <TabsTrigger value="production">
+            Production
+            {production.length > 0 && (
+              <Badge variant="secondary" className="ml-2 rounded-full">
+                {production.length}
+              </Badge>
+            )}
+          </TabsTrigger>
+          <TabsTrigger value="archives">
+            Archive
+            {archives.length > 0 && (
+              <Badge variant="secondary" className="ml-2 rounded-full">
+                {archives.length}
+              </Badge>
+            )}
+          </TabsTrigger>
         </TabsList>
 
         <TabsContent value="all">
